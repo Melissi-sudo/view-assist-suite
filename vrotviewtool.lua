@@ -1576,7 +1576,7 @@ end
 --=========================================================
 local MobileAimButton
 
-if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then [web:129][web:131]
+if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
     MobileAimButton = Instance.new("TextButton")
     MobileAimButton.Size = UDim2.new(0, 80, 0, 40)
     MobileAimButton.Position = UDim2.new(1, -100, 1, -80)
