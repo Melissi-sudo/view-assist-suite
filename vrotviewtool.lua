@@ -677,11 +677,13 @@ local Rage_FOVRadius            = 550
 local Rage_Sensitivity          = 0.5
 local Rage_StickFrames          = 14
 
+local SilentAim_Enabled         = false
+
 local SavedAimPos               = nil
 local MobileAimButton           = nil
 
 --=========================================================
--- FIRE HANDLER (NO SILENT / AUTO)
+-- FIRE HANDLER (NO AUTO)
 --=========================================================
 local function fireWeapon()
 	-- call your tool firing logic here
@@ -873,6 +875,58 @@ local function getBestTargetPos(customFOV, doWallCheck)
 			end
 		else
 			lastRageTarget = nil
+		end
+	end
+
+	return bestPos, bestPlayer
+end
+
+-- 360° target picker: ignores FOV and on-screen checks
+local function getBestTargetPos360(doWallCheck)
+	local myChar = player.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot or not camera then return nil end
+
+	local bestPos, bestPlayer
+	local bestDist = math.huge
+	local camPos = camera.CFrame.Position
+
+	local function consider(plr)
+		if plr == player then return end
+		if Aimbot_TeamCheck and sameTeam(player, plr) then return end
+		local char = plr.Character
+		local head = char and getHead(char)
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		if not head or not root then return end
+
+		local aimPos = predictedPosition(head, root)
+		if not aimPos then return end
+
+		if doWallCheck and not visible(myRoot.Position, aimPos, {myChar, char}) then
+			return
+		end
+
+		local dist = (aimPos - camPos).Magnitude
+		if dist < bestDist then
+			bestDist = dist
+			bestPos = aimPos
+			bestPlayer = plr
+		end
+	end
+
+	if targetMode == "PerPlayer" then
+		if selectedPlayer then
+			consider(selectedPlayer)
+		end
+	elseif targetMode == "Enemies" then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if not sameTeam(player, plr) then
+				consider(plr)
+			end
+		end
+	else
+		for _, plr in ipairs(Players:GetPlayers()) do
+			consider(plr)
 		end
 	end
 
@@ -1092,6 +1146,10 @@ createHeader(AimbotScroll, "AIMBOT / RAGE", "Main aim assist controls")
 createToggle(AimbotScroll, "Aimbot Enabled", "Global aim assist", Aimbot_Enabled, function(v)
 	Aimbot_Enabled = v
 	if not v then Aimbot_On = false end
+end)
+
+createToggle(AimbotScroll, "Silent Aim", "One-tick snap on click (360°)", SilentAim_Enabled, function(v)
+	SilentAim_Enabled = v
 end)
 
 createToggle(AimbotScroll, "Rage Mode", "Sticky, large FOV", RageMode_Enabled, function(v)
@@ -1383,10 +1441,12 @@ task.spawn(function()
 end)
 
 --=========================================================
--- INPUT: AIMBOT TOGGLE ONLY
+-- INPUT: AIMBOT TOGGLE + SILENT AIM 360
 --=========================================================
 UserInputService.InputBegan:Connect(function(input, gp)
 	if gp then return end
+
+	-- toggle aimbot
 	if input.UserInputType == Enum.UserInputType.Keyboard
 		and input.KeyCode == Settings.AimbotKey then
 		if not Aimbot_Enabled then return end
@@ -1395,6 +1455,23 @@ UserInputService.InputBegan:Connect(function(input, gp)
 		if MobileAimButton then
 			MobileAimButton.BackgroundColor3 = Aimbot_On and ACCENT_RED or BUTTON_BG_STRONG
 		end
+	end
+
+	-- SILENT AIM 360°: one-tick snap and revert
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Aimbot_Enabled and SilentAim_Enabled then
+			local bestPos = select(1, getBestTargetPos360(Aimbot_WallCheck))
+			if bestPos then
+				local originalCF = camera.CFrame
+				local snapCF = CFrame.new(originalCF.Position, bestPos)
+				camera.CFrame = snapCF
+				RunService.RenderStepped:Wait()
+				camera.CFrame = originalCF
+			end
+		end
+
+		-- normal fire
+		fireWeapon()
 	end
 end)
 
@@ -1449,7 +1526,7 @@ RunService.RenderStepped:Connect(function()
 
 	-- aimbot / rage
 	if Aimbot_Enabled and Aimbot_On then
-		local aimPos, targetPlr = getBestTargetPos(nil, Aimbot_WallCheck)
+		local aimPos = select(1, getBestTargetPos(nil, Aimbot_WallCheck))
 		if aimPos then
 			local currentCF = camera.CFrame
 			local targetCF = CFrame.new(currentCF.Position, aimPos)
