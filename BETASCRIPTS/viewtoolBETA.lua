@@ -1183,7 +1183,7 @@ RunService.RenderStepped:Connect(function()
 					
 					if not visibleEnemies[plr.UserId] then
 						-- Enemy just became visible
-						playSound(SOUND_ENEMY_VISIBLE, 0.5)
+						playSound(SOUND_ENEMY_VISIBLE, 1.2)
 					end
 				end
 			end
