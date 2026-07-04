@@ -1195,11 +1195,11 @@ end)
 
 -- Monitor hit sounds
 if Aimbot_HitSound then
-	local function onPlayerHit(plr)
-		local char = plr.Character
-		if not char then return end
-		
-		local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local function onPlayerHit()
+	local char = player.Character
+	if not char then return end
+
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
 		if not humanoid then return end
 		
 		local lastHealth = humanoid.Health
@@ -1212,14 +1212,14 @@ if Aimbot_HitSound then
 		end)
 	end
 	
-	for _, plr in ipairs(Players:GetPlayers()) do
-		onPlayerHit(plr)
-	end
-	
-	Players.PlayerAdded:Connect(function(plr)
-		task.wait(0.1)
-		onPlayerHit(plr)
-	end)
+if player.Character then
+	onPlayerHit()
+end
+
+player.CharacterAdded:Connect(function()
+	task.wait(0.1)
+	onPlayerHit()
+end)
 end
 
 if UserInputService.TouchEnabled then
