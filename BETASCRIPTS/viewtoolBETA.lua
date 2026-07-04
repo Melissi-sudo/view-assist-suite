@@ -671,6 +671,9 @@ local Aimbot_Sensitivity        = 0.18
 local Aimbot_FOVRadius          = 250
 local Aimbot_ShowFOV            = true
 local Aimbot_On                 = false
+local Aimbot_360Mode            = false
+local Aimbot_EnemyVisibleSound  = true
+local Aimbot_HitSound           = true
 
 local RageMode_Enabled          = false
 local Rage_FOVRadius            = 550
@@ -681,6 +684,14 @@ local SilentAim_Enabled         = false
 
 local SavedAimPos               = nil
 local MobileAimButton           = nil
+
+-- Sound IDs
+local SOUND_ENEMY_VISIBLE = "rbxassetid://150975887"
+local SOUND_HIT = "rbxassetid://134763632925481"
+
+-- Track visible enemies for sound
+local visibleEnemies = {}
+local lastPlayedSounds = {}
 
 --=========================================================
 -- FIRE HANDLER (NO AUTO)
@@ -780,6 +791,15 @@ local function getHead(char)
 		return head
 	end
 	return nil
+end
+
+local function playSound(soundId, volume)
+	local sound = Instance.new("Sound")
+	sound.SoundId = soundId
+	sound.Volume = volume or 0.5
+	sound.Parent = workspace
+	game:GetService("Debris"):AddItem(sound, 2)
+	sound:Play()
 end
 
 local function predictedPosition(targetHead, targetRoot)
@@ -1000,449 +1020,209 @@ do
 		btnAll.BackgroundColor3     = targetMode == "All"       and ACCENT_RED_DEEP or BUTTON_BG
 		btnEnemies.BackgroundColor3 = targetMode == "Enemies"   and ACCENT_RED_DEEP or BUTTON_BG
 		btnPer.BackgroundColor3     = targetMode == "PerPlayer" and ACCENT_RED_DEEP or BUTTON_BG
+		btnAll.TextColor3     = targetMode == "All"       and TEXT_MAIN or TEXT_SUB
+		btnEnemies.TextColor3 = targetMode == "Enemies"   and TEXT_MAIN or TEXT_SUB
+		btnPer.TextColor3     = targetMode == "PerPlayer" and TEXT_MAIN or TEXT_SUB
 	end
+	refresh()
 
 	btnAll.MouseButton1Click:Connect(function()
-		targetMode = "All"; refresh()
+		targetMode = "All"
+		selectedPlayer = nil
+		refresh()
 	end)
 	btnEnemies.MouseButton1Click:Connect(function()
-		targetMode = "Enemies"; refresh()
+		targetMode = "Enemies"
+		selectedPlayer = nil
+		refresh()
 	end)
 	btnPer.MouseButton1Click:Connect(function()
-		targetMode = "PerPlayer"; refresh()
-	end)
-	refresh()
-end
-
-do
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 0, 80)
-	frame.BackgroundColor3 = PANEL_BG
-	frame.BorderSizePixel = 0
-	frame.ZIndex = 5
-	frame.Parent = TargetScroll
-	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
-	Instance.new("UIStroke", frame).Color = Color3.fromRGB(60,60,80)
-
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -140, 0, 26)
-	lbl.Position = UDim2.new(0, 10, 0, 4)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = "Locked Player"
-	lbl.TextColor3 = TEXT_MAIN
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Font = Enum.Font.GothamSemibold
-	lbl.TextScaled = true
-	lbl.ZIndex = 5
-	lbl.Parent = frame
-
-	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -140, 0, 20)
-	sub.Position = UDim2.new(0, 10, 0, 30)
-	sub.BackgroundTransparency = 1
-	sub.Text = "Used when mode = Per"
-	sub.TextColor3 = TEXT_DIM
-	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
-	sub.TextScaled = true
-	sub.ZIndex = 5
-	sub.Parent = frame
-
-	local current = Instance.new("TextLabel")
-	current.Size = UDim2.new(1, -140, 0, 20)
-	current.Position = UDim2.new(0, 10, 0, 52)
-	current.BackgroundTransparency = 1
-	current.Text = "Current: none"
-	current.TextColor3 = TEXT_SUB
-	current.TextXAlignment = Enum.TextXAlignment.Left
-	current.Font = Enum.Font.Gotham
-	current.TextScaled = true
-	current.ZIndex = 5
-	current.Parent = frame
-
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 120, 0, 30)
-	btn.Position = UDim2.new(1, -130, 0.5, -15)
-	btn.BackgroundColor3 = BUTTON_BG
-	btn.Text = "Select"
-	btn.TextColor3 = TEXT_MAIN
-	btn.Font = Enum.Font.GothamSemibold
-	btn.TextScaled = true
-	btn.AutoButtonColor = false
-	btn.BorderSizePixel = 0
-	btn.ZIndex = 5
-	btn.Parent = frame
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
-
-	local dropdown = Instance.new("Frame")
-	dropdown.Size = UDim2.new(0, 180, 0, 0)
-	dropdown.Position = UDim2.new(1, -190, 1, 4)
-	dropdown.BackgroundColor3 = PANEL_BG
-	dropdown.BorderSizePixel = 0
-	dropdown.Visible = false
-	dropdown.ZIndex = 10
-	dropdown.Parent = frame
-	Instance.new("UICorner", dropdown).CornerRadius = UDim.new(0, 8)
-	local dStroke = Instance.new("UIStroke", dropdown)
-	dStroke.Color = ACCENT_RED_DEEP
-	dStroke.Thickness = 1.2
-
-	local dLayout = Instance.new("UIListLayout", dropdown)
-	dLayout.Padding = UDim.new(0, 2)
-	local dPad = Instance.new("UIPadding", dropdown)
-	dPad.PaddingTop = UDim.new(0, 4)
-	dPad.PaddingBottom = UDim.new(0, 4)
-	dPad.PaddingLeft = UDim.new(0, 4)
-	dPad.PaddingRight = UDim.new(0, 4)
-
-	local function refreshDropdown()
-		for _, child in ipairs(dropdown:GetChildren()) do
-			if child:IsA("TextButton") then child:Destroy() end
-		end
-		local count = 0
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr ~= player then
-				count += 1
-				local b = Instance.new("TextButton")
-				b.Size = UDim2.new(1, -8, 0, 22)
-				b.BackgroundColor3 = BUTTON_BG
-				b.TextColor3 = TEXT_MAIN
-				b.Text = plr.Name
-				b.Font = Enum.Font.Gotham
-				b.TextScaled = true
-				b.AutoButtonColor = false
-				b.BorderSizePixel = 0
-				b.ZIndex = 11
-				b.Parent = dropdown
-				Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
-
-				b.MouseButton1Click:Connect(function()
-					selectedPlayer = plr
-					current.Text = "Current: " .. plr.Name
-					dropdown.Visible = false
-					dropdown.Size = UDim2.new(0, 180, 0, 0)
-				end)
-			end
-		end
-		dropdown.Size = UDim2.new(0, 180, 0, math.min(22 * count + 8, 150))
-	end
-
-	btn.MouseButton1Click:Connect(function()
-		if dropdown.Visible then
-			dropdown.Visible = false
-			dropdown.Size = UDim2.new(0, 180, 0, 0)
-		else
-			refreshDropdown()
-			dropdown.Visible = true
-		end
+		targetMode = "PerPlayer"
+		refresh()
 	end)
 end
 
---=========================================================
--- AIMBOT / RAGE UI
---=========================================================
-createHeader(AimbotScroll, "AIMBOT / RAGE", "Main aim assist controls")
+createHeader(AimbotScroll, "AIMBOT", "Prediction, wallcheck, and sensitivity")
 
-createToggle(AimbotScroll, "Aimbot Enabled", "Global aim assist", Aimbot_Enabled, function(v)
-	Aimbot_Enabled = v
-	if not v then Aimbot_On = false end
+createToggle(AimbotScroll, "Aimbot Enabled", "Global aim assist", Aimbot_Enabled, function(val)
+	Aimbot_Enabled = val
+	if not val then Aimbot_On = false end
 end)
 
-createToggle(AimbotScroll, "Silent Aim", "One-tick snap on click (360°)", SilentAim_Enabled, function(v)
-	SilentAim_Enabled = v
+createToggle(AimbotScroll, "360 Mode", "Detect all enemies in 360°", Aimbot_360Mode, function(val)
+	Aimbot_360Mode = val
 end)
 
-createToggle(AimbotScroll, "Rage Mode", "Sticky, large FOV", RageMode_Enabled, function(v)
-	RageMode_Enabled = v
-	RageCircleGui.Visible = v
+createToggle(AimbotScroll, "Show FOV", "", Aimbot_ShowFOV, function(val)
+	Aimbot_ShowFOV = val
+	FOVCircleGui.Visible = val
 end)
 
-createToggle(AimbotScroll, "Team Check", "Ignore teammates", Aimbot_TeamCheck, function(v)
-	Aimbot_TeamCheck = v
+createToggle(AimbotScroll, "Prediction Enabled", "Turn off to use raw head", Aimbot_Prediction, function(val)
+	Aimbot_Prediction = val
 end)
 
-createToggle(AimbotScroll, "Wall Check", "Requires line of sight", Aimbot_WallCheck, function(v)
-	Aimbot_WallCheck = v
+createToggle(AimbotScroll, "Wall Check", "Requires line of sight", Aimbot_WallCheck, function(val)
+	Aimbot_WallCheck = val
 end)
 
-createToggle(AimbotScroll, "Prediction Enabled", "Turn off to use raw head", Aimbot_Prediction, function(v)
-	Aimbot_Prediction = v
+createSlider(AimbotScroll, "FOV Radius", 100, 800, Aimbot_FOVRadius, function(val)
+	Aimbot_FOVRadius = val
+	FOVCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
+end, "Pixels")
+
+createSlider(AimbotScroll, "Sensitivity", 0, 1, Aimbot_Sensitivity, function(val)
+	Aimbot_Sensitivity = val
 end)
 
-createSlider(AimbotScroll, "Aim Smoothness", 0.02, 0.5, Aimbot_Sensitivity, function(v)
-	Aimbot_Sensitivity = v
-end, "Lower = snappier")
+createHeader(AimbotScroll, "RAGE MODE", "Strong, sticky targeting")
 
-createSlider(AimbotScroll, "FOV Radius", 40, 600, Aimbot_FOVRadius, function(v)
-	Aimbot_FOVRadius = v
-	FOVCircleGui.Size = UDim2.new(0, v * 2, 0, v * 2)
-end, "Circle size")
+createToggle(AimbotScroll, "Rage Mode", "", RageMode_Enabled, function(val)
+	RageMode_Enabled = val
+	RageCircleGui.Visible = val
+end)
 
-createSlider(AimbotScroll, "Base Prediction", 0, 0.5, Settings.BasePredictionStrength, function(v)
-	Settings.BasePredictionStrength = v
-end, "Base lead")
+createSlider(AimbotScroll, "Rage FOV", 100, 1000, Rage_FOVRadius, function(val)
+	Rage_FOVRadius = val
+	RageCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
+end)
 
-createSlider(AimbotScroll, "Distance Scale", 0, 0.003, Settings.DistanceScaleFactor, function(v)
-	Settings.DistanceScaleFactor = v
-end, "Lead grows with distance")
+createSlider(AimbotScroll, "Rage Sensitivity", 0, 1, Rage_Sensitivity, function(val)
+	Rage_Sensitivity = val
+end)
 
---=========================================================
--- ESP UI
---=========================================================
-createHeader(ESPScroll, "ESP", "Highlights around players")
+createSlider(AimbotScroll, "Stick Frames", 1, 30, Rage_StickFrames, function(val)
+	Rage_StickFrames = math.floor(val)
+end)
 
-createToggle(ESPScroll, "ESP Enabled", "Highlights players in range", ESP_Enabled, function(v)
-	ESP_Enabled = v
-	if not v then
+createHeader(AimbotScroll, "AUDIO", "Sound notifications")
+
+createToggle(AimbotScroll, "Enemy Visible Sound", "Play when enemy is in view", Aimbot_EnemyVisibleSound, function(val)
+	Aimbot_EnemyVisibleSound = val
+end)
+
+createToggle(AimbotScroll, "Hit Sound", "Play when aimed target takes dmg", Aimbot_HitSound, function(val)
+	Aimbot_HitSound = val
+end)
+
+createHeader(ESPScroll, "ESP", "Wallhacks and player highlights")
+
+createToggle(ESPScroll, "ESP Enabled", "Highlights players in range", ESP_Enabled, function(val)
+	ESP_Enabled = val
+	if not val then
 		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
 			h.Enabled = false
 		end
 	end
 end)
 
-createToggle(ESPScroll, "Team Colors", "Tint with team color", ESP_TeamColor, function(v)
-	ESP_TeamColor = v
+createSlider(ESPScroll, "Max Distance", 500, 5000, ESP_MaxDistance, function(val)
+	ESP_MaxDistance = val
+end, "Studs")
+
+createSlider(ESPScroll, "Fill Opacity", 0, 1, 1 - ESP_FillTransparency, function(val)
+	ESP_FillTransparency = 1 - val
+	for _, child in ipairs(ESP_HighlightsFolder:GetChildren()) do
+		if child:IsA("Highlight") then
+			child.FillTransparency = ESP_FillTransparency
+		end
+	end
 end)
 
-createSlider(ESPScroll, "Max Distance", 50, 5000, ESP_MaxDistance, function(v)
-	ESP_MaxDistance = v
-end, "Max ESP range")
+createHeader(SettingsScroll, "SETTINGS", "Behavior and visuals")
 
-createSlider(ESPScroll, "Fill Transparency", 0.1, 0.9, ESP_FillTransparency, function(v)
-	ESP_FillTransparency = v
-end, "Lower = more solid")
+createToggle(SettingsScroll, "Animations", "Smooth UI transitions", animationsEnabled, function(val)
+	animationsEnabled = val
+end)
 
---=========================================================
--- SETTINGS UI (KEYBIND + MOBILE)
---=========================================================
-createHeader(SettingsScroll, "SETTINGS", "Keybinds & Mobile")
+-- FOV circle update loop + enemy detection + audio monitoring
+RunService.RenderStepped:Connect(function()
+	local scale = uiScale.Scale
+	local myChar = player.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-local function keyNameFromKeyCode(kc)
-	local s = tostring(kc)
-	return string.sub(s, 14)
-end
+	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+		-- Mobile: keep FOV in the center
+		local center = camera.ViewportSize / 2
 
-local waitingForAimbotKey = false
+		FOVCircleGui.Position = UDim2.fromOffset(
+			center.X / scale,
+			center.Y / scale
+		)
 
-do
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 0, 60)
-	frame.BackgroundColor3 = PANEL_BG
-	frame.BorderSizePixel = 0
-	frame.ZIndex = 5
-	frame.Parent = SettingsScroll
-	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
-	Instance.new("UIStroke", frame).Color = Color3.fromRGB(60,60,80)
+		RageCircleGui.Position = UDim2.fromOffset(
+			center.X / scale,
+			center.Y / scale
+		)
+	else
+		-- PC: follow mouse
+		local mouseLocation = UserInputService:GetMouseLocation()
 
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -140, 0, 26)
-	lbl.Position = UDim2.new(0, 10, 0, 4)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = "Aimbot Toggle Key"
-	lbl.TextColor3 = TEXT_MAIN
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Font = Enum.Font.GothamSemibold
-	lbl.TextScaled = true
-	lbl.ZIndex = 5
-	lbl.Parent = frame
+		FOVCircleGui.Position = UDim2.fromOffset(
+			mouseLocation.X / scale,
+			mouseLocation.Y / scale
+		)
 
-	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, -140, 0, 20)
-	sub.Position = UDim2.new(0, 10, 0, 30)
-	sub.BackgroundTransparency = 1
-	sub.Text = "Click and press a key"
-	sub.TextColor3 = TEXT_DIM
-	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
-	sub.TextScaled = true
-	sub.ZIndex = 5
-	sub.Parent = frame
-
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 120, 0, 32)
-	btn.Position = UDim2.new(1, -130, 0.5, -16)
-	btn.BackgroundColor3 = BUTTON_BG
-	btn.Text = keyNameFromKeyCode(Settings.AimbotKey)
-	btn.TextColor3 = TEXT_MAIN
-	btn.Font = Enum.Font.GothamSemibold
-	btn.TextScaled = true
-	btn.AutoButtonColor = false
-	btn.BorderSizePixel = 0
-	btn.ZIndex = 5
-	btn.Parent = frame
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
-
-	btn.MouseButton1Click:Connect(function()
-		waitingForAimbotKey = true
-		btn.Text = "Press..."
-	end)
-
-	UserInputService.InputBegan:Connect(function(input, gp)
-		if gp then return end
-		if waitingForAimbotKey and input.UserInputType == Enum.UserInputType.Keyboard then
-			waitingForAimbotKey = false
-			Settings.AimbotKey = input.KeyCode
-			btn.Text = keyNameFromKeyCode(Settings.AimbotKey)
-			notify("Aimbot key = " .. btn.Text, SUCCESS_GREEN)
-		end
-	end)
-end
-
-local MobileSettingsFrame = Instance.new("Frame")
-MobileSettingsFrame.Size = UDim2.new(1, 0, 0, 80)
-MobileSettingsFrame.BackgroundColor3 = PANEL_BG
-MobileSettingsFrame.BorderSizePixel = 0
-MobileSettingsFrame.ZIndex = 5
-MobileSettingsFrame.Parent = SettingsScroll
-Instance.new("UICorner", MobileSettingsFrame).CornerRadius = UDim.new(0, 10)
-Instance.new("UIStroke", MobileSettingsFrame).Color = Color3.fromRGB(60,60,80)
-
-local msLabel = Instance.new("TextLabel")
-msLabel.Size = UDim2.new(1, -140, 0, 26)
-msLabel.Position = UDim2.new(0, 10, 0, 4)
-msLabel.BackgroundTransparency = 1
-msLabel.Text = "Mobile Aim Button"
-msLabel.TextColor3 = TEXT_MAIN
-msLabel.TextScaled = true
-msLabel.Font = Enum.Font.GothamSemibold
-msLabel.TextXAlignment = Enum.TextXAlignment.Left
-msLabel.ZIndex = 5
-msLabel.Parent = MobileSettingsFrame
-
-local msSub = Instance.new("TextLabel")
-msSub.Size = UDim2.new(1, -140, 0, 20)
-msSub.Position = UDim2.new(0, 10, 0, 30)
-msSub.BackgroundTransparency = 1
-msSub.Text = "Drag button, then Save"
-msSub.TextColor3 = TEXT_DIM
-msSub.TextScaled = true
-msSub.Font = Enum.Font.Gotham
-msSub.TextXAlignment = Enum.TextXAlignment.Left
-msSub.ZIndex = 5
-msSub.Parent = MobileSettingsFrame
-
-local SaveMobilePosBtn = Instance.new("TextButton")
-SaveMobilePosBtn.Size = UDim2.new(0, 120, 0, 32)
-SaveMobilePosBtn.Position = UDim2.new(1, -130, 0, 10)
-SaveMobilePosBtn.BackgroundColor3 = BUTTON_BG
-SaveMobilePosBtn.Text = "Save Position"
-SaveMobilePosBtn.TextColor3 = TEXT_MAIN
-SaveMobilePosBtn.Font = Enum.Font.GothamSemibold
-SaveMobilePosBtn.TextScaled = true
-SaveMobilePosBtn.AutoButtonColor = false
-SaveMobilePosBtn.BorderSizePixel = 0
-SaveMobilePosBtn.ZIndex = 5
-SaveMobilePosBtn.Parent = MobileSettingsFrame
-Instance.new("UICorner", SaveMobilePosBtn).CornerRadius = UDim.new(1, 0)
-
---=========================================================
--- MOBILE AIM BUTTON
---=========================================================
-if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-	MobileAimButton = Instance.new("TextButton")
-	MobileAimButton.Size = UDim2.new(0, 80, 0, 40)
-	MobileAimButton.Position = SavedAimPos or UDim2.new(1, -110, 1, -140)
-	MobileAimButton.AnchorPoint = Vector2.new(0, 0)
-	MobileAimButton.BackgroundColor3 = BUTTON_BG_STRONG
-	MobileAimButton.Text = ""
-	MobileAimButton.TextColor3 = TEXT_MAIN
-	MobileAimButton.Font = Enum.Font.GothamBold
-	MobileAimButton.TextScaled = true
-	MobileAimButton.AutoButtonColor = false
-	MobileAimButton.BorderSizePixel = 0
-	MobileAimButton.ZIndex = 999
-	MobileAimButton.Parent = ScreenGui
-	Instance.new("UICorner", MobileAimButton).CornerRadius = UDim.new(1, 0)
-	local mbStroke = Instance.new("UIStroke", MobileAimButton)
-	mbStroke.Color = ACCENT_RED_DEEP
-	mbStroke.Thickness = 1.6
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 1, 0)
-	label.BackgroundTransparency = 1
-	label.Text = "AIM"
-	label.TextColor3 = TEXT_MAIN
-	label.Font = Enum.Font.GothamBold
-	label.TextScaled = true
-	label.ZIndex = 1000
-	label.Parent = MobileAimButton
-
-	local dragging = false
-	local dragOffset
-
-	MobileAimButton.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragOffset = input.Position - MobileAimButton.AbsolutePosition
-		end
-	end)
-
-	MobileAimButton.InputChanged:Connect(function(input)
-		if dragging and input.UserInputType == Enum.UserInputType.Touch then
-			local vp = camera.ViewportSize
-			local newPos = input.Position - dragOffset
-			MobileAimButton.Position = UDim2.new(
-				0,
-				math.clamp(newPos.X, 0, vp.X - MobileAimButton.AbsoluteSize.X),
-				0,
-				math.clamp(newPos.Y, 0, vp.Y - MobileAimButton.AbsoluteSize.Y)
-			)
-		end
-	end)
-
-	UserInputService.TouchEnded:Connect(function()
-		dragging = false
-	end)
-
-	local function refreshMobileState()
-		MobileAimButton.BackgroundColor3 = Aimbot_On and ACCENT_RED or BUTTON_BG_STRONG
+		RageCircleGui.Position = UDim2.fromOffset(
+			mouseLocation.X / scale,
+			mouseLocation.Y / scale
+		)
 	end
 
-	MobileAimButton.MouseButton1Click:Connect(function()
-		if not Aimbot_Enabled then
-			notify("Enable aimbot first", ERROR_RED)
-			return
-		end
-		Aimbot_On = not Aimbot_On
-		refreshMobileState()
-	end)
-
-	SaveMobilePosBtn.MouseButton1Click:Connect(function()
-		if not MobileAimButton then return end
-		SavedAimPos = MobileAimButton.Position
-		notify("Saved mobile aim position", SUCCESS_GREEN)
-	end)
-
-	refreshMobileState()
-else
-	MobileSettingsFrame.Visible = false
-end
-
--- check mobile aim button every 9 seconds
-task.spawn(function()
-	while ScreenGui.Parent do
-		task.wait(9)
-		if MobileAimButton and MobileAimButton.Parent == ScreenGui then
-			local vp = camera.ViewportSize
-			local pos = MobileAimButton.AbsolutePosition
-			local size = MobileAimButton.AbsoluteSize
-			if pos.X + size.X < 0 or pos.Y + size.Y < 0 or pos.X > vp.X or pos.Y > vp.Y then
-				MobileAimButton.Position = SavedAimPos or UDim2.new(1, -110, 1, -140)
-			end
-			MobileAimButton.Visible = true
-			MobileAimButton.ZIndex = 999
-			for _, c in ipairs(MobileAimButton:GetChildren()) do
-				if c:IsA("TextLabel") then
-					c.ZIndex = 1000
+	-- Track enemy sounds
+	if Aimbot_EnemyVisibleSound and myRoot then
+		local newVisibleEnemies = {}
+		
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player then
+				local char = plr.Character
+				local head = char and getHead(char)
+				
+				if head and (not Aimbot_TeamCheck or not sameTeam(player, plr)) then
+					newVisibleEnemies[plr.UserId] = true
+					
+					if not visibleEnemies[plr.UserId] then
+						-- Enemy just became visible
+						playSound(SOUND_ENEMY_VISIBLE, 0.5)
+					end
 				end
 			end
 		end
+		
+		visibleEnemies = newVisibleEnemies
 	end
 end)
 
---=========================================================
--- INPUT: AIMBOT TOGGLE + SILENT AIM 360
---=========================================================
+-- Monitor hit sounds
+if Aimbot_HitSound then
+	local function onPlayerHit(plr)
+		local char = plr.Character
+		if not char then return end
+		
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if not humanoid then return end
+		
+		local lastHealth = humanoid.Health
+		
+		humanoid.HealthChanged:Connect(function(newHealth)
+			if newHealth < lastHealth and newHealth > 0 then
+				playSound(SOUND_HIT, 0.5)
+			end
+			lastHealth = newHealth
+		end)
+	end
+	
+	for _, plr in ipairs(Players:GetPlayers()) do
+		onPlayerHit(plr)
+	end
+	
+	Players.PlayerAdded:Connect(function(plr)
+		task.wait(0.1)
+		onPlayerHit(plr)
+	end)
+end
+
+-- Input: Aimbot toggle + Silent Aim 360
 UserInputService.InputBegan:Connect(function(input, gp)
 	if gp then return end
 
@@ -1457,7 +1237,7 @@ UserInputService.InputBegan:Connect(function(input, gp)
 		end
 	end
 
-	-- SILENT AIM 360°: one-tick snap and revert
+	-- Silent Aim 360°: one-tick snap and revert
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		if Aimbot_Enabled and SilentAim_Enabled then
 			local bestPos = select(1, getBestTargetPos360(Aimbot_WallCheck))
@@ -1472,67 +1252,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
 
 		-- normal fire
 		fireWeapon()
-	end
-end)
-
---=========================================================
--- RENDERSTEP: ESP every 9s + FOV + AIM
---=========================================================
-RunService.RenderStepped:Connect(function()
-	local myChar = player.Character
-	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	local now = tick()
-
-	-- ESP (9s refresh)
-	if ESP_Enabled and myRoot and now - lastESPRefresh >= 9 then
-		lastESPRefresh = now
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr ~= player then
-				local char = plr.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				local h = getOrCreateHighlight(plr)
-				if root and hum and hum.Health > 0 then
-					local dist = getDistance(myRoot.Position, root.Position)
-					if dist <= ESP_MaxDistance then
-						h.Enabled = true
-						h.Adornee = char
-						if ESP_TeamColor and plr.Team and plr.TeamColor then
-							h.FillColor = plr.TeamColor.Color
-						else
-							h.FillColor = ACCENT_RED
-						end
-						h.FillTransparency = ESP_FillTransparency
-						h.OutlineTransparency = 0
-					else
-						h.Enabled = false
-					end
-				else
-					h.Enabled = false
-				end
-			end
-		end
-	elseif not ESP_Enabled then
-		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
-			h.Enabled = false
-		end
-	end
-
-	-- FOV circles exactly under mouse (account for UIScale)
-	local mouseLocation = UserInputService:GetMouseLocation()
-	local scale = uiScale.Scale
-	FOVCircleGui.Position  = UDim2.fromOffset(mouseLocation.X / scale, mouseLocation.Y / scale)
-	RageCircleGui.Position = UDim2.fromOffset(mouseLocation.X / scale, mouseLocation.Y / scale)
-
-	-- aimbot / rage
-	if Aimbot_Enabled and Aimbot_On then
-		local aimPos = select(1, getBestTargetPos(nil, Aimbot_WallCheck))
-		if aimPos then
-			local currentCF = camera.CFrame
-			local targetCF = CFrame.new(currentCF.Position, aimPos)
-			local smooth = RageMode_Enabled and Rage_Sensitivity or Aimbot_Sensitivity
-			camera.CFrame = currentCF:Lerp(targetCF, smooth)
-		end
 	end
 end)
 
