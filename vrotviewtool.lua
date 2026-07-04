@@ -671,6 +671,9 @@ local Aimbot_Sensitivity        = 0.18
 local Aimbot_FOVRadius          = 250
 local Aimbot_ShowFOV            = true
 local Aimbot_On                 = false
+local Aimbot_360Mode            = false
+local Aimbot_EnemyVisibleSound  = true
+local Aimbot_HitSound           = true
 
 local RageMode_Enabled          = false
 local Rage_FOVRadius            = 550
@@ -681,6 +684,14 @@ local SilentAim_Enabled         = false
 
 local SavedAimPos               = nil
 local MobileAimButton           = nil
+
+-- Sound IDs
+local SOUND_ENEMY_VISIBLE = "rbxassetid://150975887"
+local SOUND_HIT = "rbxassetid://134763632925481"
+
+-- Track visible enemies for sound
+local visibleEnemies = {}
+local lastPlayedSounds = {}
 
 --=========================================================
 -- FIRE HANDLER (NO AUTO)
@@ -780,6 +791,15 @@ local function getHead(char)
 		return head
 	end
 	return nil
+end
+
+local function playSound(soundId, volume)
+	local sound = Instance.new("Sound")
+	sound.SoundId = soundId
+	sound.Volume = volume or 0.5
+	sound.Parent = workspace
+	game:GetService("Debris"):AddItem(sound, 2)
+	sound:Play()
 end
 
 local function predictedPosition(targetHead, targetRoot)
@@ -1022,80 +1042,104 @@ do
 	end)
 end
 
-createHeader(TargetScroll, "AIMBOT", "Prediction, wallcheck, and sensitivity")
+createHeader(AimbotScroll, "AIMBOT", "Prediction, wallcheck, and sensitivity")
 
-do
-	createToggle(AimbotScroll, "Aimbot Enabled", "", Aimbot_Enabled, function(val)
-		Aimbot_Enabled = val
-	end)
-	createToggle(AimbotScroll, "Show FOV", "", Aimbot_ShowFOV, function(val)
-		Aimbot_ShowFOV = val
-		FOVCircleGui.Visible = val
-	end)
-	createToggle(AimbotScroll, "Prediction", "", Aimbot_Prediction, function(val)
-		Aimbot_Prediction = val
-	end)
-	createToggle(AimbotScroll, "Wall Check", "", Aimbot_WallCheck, function(val)
-		Aimbot_WallCheck = val
-	end)
-	createSlider(AimbotScroll, "FOV Radius", 100, 800, Aimbot_FOVRadius, function(val)
-		Aimbot_FOVRadius = val
-		FOVCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
-	end, "Pixels")
-	createSlider(AimbotScroll, "Sensitivity", 0, 1, Aimbot_Sensitivity, function(val)
-		Aimbot_Sensitivity = val
-	end)
-end
+createToggle(AimbotScroll, "Aimbot Enabled", "Global aim assist", Aimbot_Enabled, function(val)
+	Aimbot_Enabled = val
+	if not val then Aimbot_On = false end
+end)
+
+createToggle(AimbotScroll, "360 Mode", "Detect all enemies in 360°", Aimbot_360Mode, function(val)
+	Aimbot_360Mode = val
+end)
+
+createToggle(AimbotScroll, "Show FOV", "", Aimbot_ShowFOV, function(val)
+	Aimbot_ShowFOV = val
+	FOVCircleGui.Visible = val
+end)
+
+createToggle(AimbotScroll, "Prediction Enabled", "Turn off to use raw head", Aimbot_Prediction, function(val)
+	Aimbot_Prediction = val
+end)
+
+createToggle(AimbotScroll, "Wall Check", "Requires line of sight", Aimbot_WallCheck, function(val)
+	Aimbot_WallCheck = val
+end)
+
+createSlider(AimbotScroll, "FOV Radius", 100, 800, Aimbot_FOVRadius, function(val)
+	Aimbot_FOVRadius = val
+	FOVCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
+end, "Pixels")
+
+createSlider(AimbotScroll, "Sensitivity", 0, 1, Aimbot_Sensitivity, function(val)
+	Aimbot_Sensitivity = val
+end)
 
 createHeader(AimbotScroll, "RAGE MODE", "Strong, sticky targeting")
 
-do
-	createToggle(AimbotScroll, "Rage Mode", "", RageMode_Enabled, function(val)
-		RageMode_Enabled = val
-		RageCircleGui.Visible = val
-	end)
-	createSlider(AimbotScroll, "Rage FOV", 100, 1000, Rage_FOVRadius, function(val)
-		Rage_FOVRadius = val
-		RageCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
-	end)
-	createSlider(AimbotScroll, "Rage Sensitivity", 0, 1, Rage_Sensitivity, function(val)
-		Rage_Sensitivity = val
-	end)
-	createSlider(AimbotScroll, "Stick Frames", 1, 30, Rage_StickFrames, function(val)
-		Rage_StickFrames = math.floor(val)
-	end)
-end
+createToggle(AimbotScroll, "Rage Mode", "", RageMode_Enabled, function(val)
+	RageMode_Enabled = val
+	RageCircleGui.Visible = val
+end)
+
+createSlider(AimbotScroll, "Rage FOV", 100, 1000, Rage_FOVRadius, function(val)
+	Rage_FOVRadius = val
+	RageCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
+end)
+
+createSlider(AimbotScroll, "Rage Sensitivity", 0, 1, Rage_Sensitivity, function(val)
+	Rage_Sensitivity = val
+end)
+
+createSlider(AimbotScroll, "Stick Frames", 1, 30, Rage_StickFrames, function(val)
+	Rage_StickFrames = math.floor(val)
+end)
+
+createHeader(AimbotScroll, "AUDIO", "Sound notifications")
+
+createToggle(AimbotScroll, "Enemy Visible Sound", "Play when enemy is in view", Aimbot_EnemyVisibleSound, function(val)
+	Aimbot_EnemyVisibleSound = val
+end)
+
+createToggle(AimbotScroll, "Hit Sound", "Play when aimed target takes dmg", Aimbot_HitSound, function(val)
+	Aimbot_HitSound = val
+end)
 
 createHeader(ESPScroll, "ESP", "Wallhacks and player highlights")
 
-do
-	createToggle(ESPScroll, "ESP Enabled", "", ESP_Enabled, function(val)
-		ESP_Enabled = val
-	end)
-	createSlider(ESPScroll, "Max Distance", 500, 5000, ESP_MaxDistance, function(val)
-		ESP_MaxDistance = val
-	end, "Studs")
-	createSlider(ESPScroll, "Fill Opacity", 0, 1, 1 - ESP_FillTransparency, function(val)
-		ESP_FillTransparency = 1 - val
-		for _, child in ipairs(ESP_HighlightsFolder:GetChildren()) do
-			if child:IsA("Highlight") then
-				child.FillTransparency = ESP_FillTransparency
-			end
+createToggle(ESPScroll, "ESP Enabled", "Highlights players in range", ESP_Enabled, function(val)
+	ESP_Enabled = val
+	if not val then
+		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
+			h.Enabled = false
 		end
-	end)
-end
+	end
+end)
+
+createSlider(ESPScroll, "Max Distance", 500, 5000, ESP_MaxDistance, function(val)
+	ESP_MaxDistance = val
+end, "Studs")
+
+createSlider(ESPScroll, "Fill Opacity", 0, 1, 1 - ESP_FillTransparency, function(val)
+	ESP_FillTransparency = 1 - val
+	for _, child in ipairs(ESP_HighlightsFolder:GetChildren()) do
+		if child:IsA("Highlight") then
+			child.FillTransparency = ESP_FillTransparency
+		end
+	end
+end)
 
 createHeader(SettingsScroll, "SETTINGS", "Behavior and visuals")
 
-do
-	createToggle(SettingsScroll, "Animations", "Smooth UI transitions", animationsEnabled, function(val)
-		animationsEnabled = val
-	end)
-end
+createToggle(SettingsScroll, "Animations", "Smooth UI transitions", animationsEnabled, function(val)
+	animationsEnabled = val
+end)
 
--- FOV circle update loop
+-- FOV circle update loop + enemy detection
 RunService.RenderStepped:Connect(function()
 	local scale = uiScale.Scale
+	local myChar = player.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
 	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
 		-- Mobile: keep FOV in the center
@@ -1124,4 +1168,91 @@ RunService.RenderStepped:Connect(function()
 			mouseLocation.Y / scale
 		)
 	end
+
+	-- Track enemy sounds
+	if Aimbot_EnemyVisibleSound and myRoot then
+		local newVisibleEnemies = {}
+		
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player then
+				local char = plr.Character
+				local head = char and getHead(char)
+				
+				if head and (not Aimbot_TeamCheck or not sameTeam(player, plr)) then
+					newVisibleEnemies[plr.UserId] = true
+					
+					if not visibleEnemies[plr.UserId] then
+						-- Enemy just became visible
+						playSound(SOUND_ENEMY_VISIBLE, 0.5)
+					end
+				end
+			end
+		end
+		
+		visibleEnemies = newVisibleEnemies
+	end
 end)
+
+-- Monitor hit sounds
+if Aimbot_HitSound then
+	local function onPlayerHit(plr)
+		local char = plr.Character
+		if not char then return end
+		
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if not humanoid then return end
+		
+		local lastHealth = humanoid.Health
+		
+		humanoid.HealthChanged:Connect(function(newHealth)
+			if newHealth < lastHealth and newHealth > 0 then
+				playSound(SOUND_HIT, 0.5)
+			end
+			lastHealth = newHealth
+		end)
+	end
+	
+	for _, plr in ipairs(Players:GetPlayers()) do
+		onPlayerHit(plr)
+	end
+	
+	Players.PlayerAdded:Connect(function(plr)
+		task.wait(0.1)
+		onPlayerHit(plr)
+	end)
+end
+
+-- Input: Aimbot toggle + Silent Aim 360
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+
+	-- toggle aimbot
+	if input.UserInputType == Enum.UserInputType.Keyboard
+		and input.KeyCode == Settings.AimbotKey then
+		if not Aimbot_Enabled then return end
+		Aimbot_On = not Aimbot_On
+		notify("Aimbot: " .. (Aimbot_On and "ON" or "OFF"), ACCENT_RED)
+		if MobileAimButton then
+			MobileAimButton.BackgroundColor3 = Aimbot_On and ACCENT_RED or BUTTON_BG_STRONG
+		end
+	end
+
+	-- Silent Aim 360°: one-tick snap and revert
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Aimbot_Enabled and SilentAim_Enabled then
+			local bestPos = select(1, getBestTargetPos360(Aimbot_WallCheck))
+			if bestPos then
+				local originalCF = camera.CFrame
+				local snapCF = CFrame.new(originalCF.Position, bestPos)
+				camera.CFrame = snapCF
+				RunService.RenderStepped:Wait()
+				camera.CFrame = originalCF
+			end
+		end
+
+		-- normal fire
+		fireWeapon()
+	end
+end)
+
+notify("VRO Aim Suite loaded", ACCENT_RED_SOFT)
