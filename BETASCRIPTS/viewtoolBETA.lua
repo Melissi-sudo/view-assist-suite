@@ -1222,6 +1222,30 @@ if Aimbot_HitSound then
 	end)
 end
 
+if UserInputService.TouchEnabled then
+    MobileAimButton = Instance.new("TextButton")
+    MobileAimButton.Size = UDim2.new(0, 70, 0, 70)
+    MobileAimButton.Position = UDim2.new(1, -90, 0.5, -35)
+    MobileAimButton.AnchorPoint = Vector2.new(0.5, 0.5)
+    MobileAimButton.BackgroundColor3 = BUTTON_BG_STRONG
+    MobileAimButton.Text = "AIM"
+    MobileAimButton.TextScaled = true
+    MobileAimButton.Font = Enum.Font.GothamBold
+    MobileAimButton.TextColor3 = TEXT_MAIN
+    MobileAimButton.Parent = ScreenGui
+
+    Instance.new("UICorner", MobileAimButton).CornerRadius = UDim.new(1, 0)
+
+    MobileAimButton.MouseButton1Click:Connect(function()
+        if not Aimbot_Enabled then return end
+
+        Aimbot_On = not Aimbot_On
+        MobileAimButton.BackgroundColor3 = Aimbot_On and ACCENT_RED or BUTTON_BG_STRONG
+
+        notify("Aimbot: " .. (Aimbot_On and "ON" or "OFF"), ACCENT_RED)
+    end)
+end
+
 -- Input: Aimbot toggle + Silent Aim 360
 UserInputService.InputBegan:Connect(function(input, gp)
 	if gp then return end
