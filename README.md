@@ -5,7 +5,7 @@ Collection of lightweight client-side utilities for input handling, view helpers
 ``` lua
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Melissi-sudo/view-assist-suite/refs/heads/main/BETASCRIPTS/viewtoolBETA.lua'))()
 ```
-Other Features coming soon!
+Other Features coming soon! (Beta is packed with way more features than the normal lua, but it mightnbe a little unstable) 
 # About View Assist:
 Many tools, tested, errorless. Gives advantage to all games. 100% Free
 # Website:
