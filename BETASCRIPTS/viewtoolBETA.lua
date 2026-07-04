@@ -1303,4 +1303,54 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
+RunService.RenderStepped:Connect(function()
+	if not ESP_Enabled then
+		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
+			if h:IsA("Highlight") then
+				h.Enabled = false
+				h.Adornee = nil
+			end
+		end
+		return
+	end
+
+	local myChar = player.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= player then
+			local char = plr.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+			local highlight = getOrCreateHighlight(plr)
+
+			if root and hum and hum.Health > 0 then
+				local dist = (root.Position - myRoot.Position).Magnitude
+
+				if dist <= ESP_MaxDistance then
+					highlight.Adornee = char
+					highlight.Enabled = true
+					highlight.FillTransparency = ESP_FillTransparency
+
+					if ESP_TeamColor and sameTeam(player, plr) then
+						highlight.FillColor = Color3.fromRGB(0, 170, 255)
+						highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+					else
+						highlight.FillColor = ACCENT_RED
+						highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+					end
+				else
+					highlight.Enabled = false
+					highlight.Adornee = nil
+				end
+			else
+				highlight.Enabled = false
+				highlight.Adornee = nil
+			end
+		end
+	end
+end)
+
 notify("VRO Aim Suite loaded", ACCENT_RED_SOFT)
