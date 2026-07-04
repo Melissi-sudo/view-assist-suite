@@ -38,6 +38,7 @@ local animationsEnabled = true
 --=========================================================
 local Settings = {
 	AimbotKey            = Enum.KeyCode.E,
+	MobileAimKey         = Enum.KeyCode.ButtonL1,  -- Mobile aim key
 	BasePredictionStrength = 0.12,
 	DistanceScaleFactor  = 0.001,
 }
@@ -684,6 +685,7 @@ local SilentAim_Enabled         = false
 
 local SavedAimPos               = nil
 local MobileAimButton           = nil
+local mobileAimActive           = false
 
 -- Sound IDs
 local SOUND_ENEMY_VISIBLE = "rbxassetid://150975887"
@@ -954,196 +956,71 @@ local function getBestTargetPos360(doWallCheck)
 end
 
 --=========================================================
--- TARGETING UI
+-- MOBILE AIM BUTTON
 --=========================================================
-createHeader(TargetScroll, "TARGETING", "Mode and locked target")
-
-do
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 0, 80)
-	frame.BackgroundColor3 = PANEL_BG
-	frame.BorderSizePixel = 0
-	frame.ZIndex = 5
-	frame.Parent = TargetScroll
-	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
-	Instance.new("UIStroke", frame).Color = Color3.fromRGB(60,60,80)
-
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, 0, 0, 26)
-	lbl.Position = UDim2.new(0, 10, 0, 4)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = "Target Mode"
-	lbl.TextColor3 = TEXT_MAIN
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Font = Enum.Font.GothamSemibold
-	lbl.TextScaled = true
-	lbl.ZIndex = 5
-	lbl.Parent = frame
-
-	local sub = Instance.new("TextLabel")
-	sub.Size = UDim2.new(1, 0, 0, 20)
-	sub.Position = UDim2.new(0, 10, 0, 30)
-	sub.BackgroundTransparency = 1
-	sub.Text = "All players, enemies only, or a locked player"
-	sub.TextColor3 = TEXT_DIM
-	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Font = Enum.Font.Gotham
-	sub.TextScaled = true
-	sub.ZIndex = 5
-	sub.Parent = frame
-
-	local btnAll = Instance.new("TextButton")
-	btnAll.Size = UDim2.new(0, 80, 0, 26)
-	btnAll.Position = UDim2.new(0, 10, 0, 50)
-	btnAll.BackgroundColor3 = BUTTON_BG_STRONG
-	btnAll.Text = "All"
-	btnAll.TextColor3 = TEXT_MAIN
-	btnAll.Font = Enum.Font.GothamSemibold
-	btnAll.TextScaled = true
-	btnAll.AutoButtonColor = false
-	btnAll.BorderSizePixel = 0
-	btnAll.ZIndex = 5
-	btnAll.Parent = frame
-	Instance.new("UICorner", btnAll).CornerRadius = UDim.new(0, 6)
-
-	local btnEnemies = btnAll:Clone()
-	btnEnemies.Text = "Enemies"
-	btnEnemies.Position = UDim2.new(0, 96, 0, 50)
-	btnEnemies.Parent = frame
-
-	local btnPer = btnAll:Clone()
-	btnPer.Text = "Per"
-	btnPer.Position = UDim2.new(0, 182, 0, 50)
-	btnPer.Parent = frame
-
-	local function refresh()
-		btnAll.BackgroundColor3     = targetMode == "All"       and ACCENT_RED_DEEP or BUTTON_BG
-		btnEnemies.BackgroundColor3 = targetMode == "Enemies"   and ACCENT_RED_DEEP or BUTTON_BG
-		btnPer.BackgroundColor3     = targetMode == "PerPlayer" and ACCENT_RED_DEEP or BUTTON_BG
-		btnAll.TextColor3     = targetMode == "All"       and TEXT_MAIN or TEXT_SUB
-		btnEnemies.TextColor3 = targetMode == "Enemies"   and TEXT_MAIN or TEXT_SUB
-		btnPer.TextColor3     = targetMode == "PerPlayer" and TEXT_MAIN or TEXT_SUB
-	end
-	refresh()
-
-	btnAll.MouseButton1Click:Connect(function()
-		targetMode = "All"
-		selectedPlayer = nil
-		refresh()
+local function createMobileAimButton()
+	local mobileBtn = Instance.new("TextButton")
+	mobileBtn.Name = "MobileAimButton"
+	mobileBtn.Size = UDim2.new(0, 80, 0, 80)
+	mobileBtn.Position = UDim2.new(0, 20, 1, -100)
+	mobileBtn.BackgroundColor3 = BUTTON_BG_STRONG
+	mobileBtn.Text = "AIM"
+	mobileBtn.TextColor3 = TEXT_MAIN
+	mobileBtn.Font = Enum.Font.GothamBlack
+	mobileBtn.TextScaled = true
+	mobileBtn.AutoButtonColor = false
+	mobileBtn.BorderSizePixel = 0
+	mobileBtn.ZIndex = 40
+	mobileBtn.Parent = ScreenGui
+	Instance.new("UICorner", mobileBtn).CornerRadius = UDim.new(1, 0)
+	
+	local mobileStroke = Instance.new("UIStroke", mobileBtn)
+	mobileStroke.Color = ACCENT_RED_DEEP
+	mobileStroke.Thickness = 2
+	
+	mobileBtn.MouseButton1Down:Connect(function()
+		if Aimbot_Enabled then
+			mobileAimActive = true
+			mobileBtn.BackgroundColor3 = ACCENT_RED
+		end
 	end)
-	btnEnemies.MouseButton1Click:Connect(function()
-		targetMode = "Enemies"
-		selectedPlayer = nil
-		refresh()
+	
+	mobileBtn.MouseButton1Up:Connect(function()
+		mobileAimActive = false
+		mobileBtn.BackgroundColor3 = BUTTON_BG_STRONG
 	end)
-	btnPer.MouseButton1Click:Connect(function()
-		targetMode = "PerPlayer"
-		refresh()
-	end)
+	
+	return mobileBtn
 end
 
-createHeader(AimbotScroll, "AIMBOT", "Prediction, wallcheck, and sensitivity")
+MobileAimButton = createMobileAimButton()
 
-createToggle(AimbotScroll, "Aimbot Enabled", "Global aim assist", Aimbot_Enabled, function(val)
-	Aimbot_Enabled = val
-	if not val then Aimbot_On = false end
-end)
-
-createToggle(AimbotScroll, "360 Mode", "Detect all enemies in 360°", Aimbot_360Mode, function(val)
-	Aimbot_360Mode = val
-end)
-
-createToggle(AimbotScroll, "Show FOV", "", Aimbot_ShowFOV, function(val)
-	Aimbot_ShowFOV = val
-	FOVCircleGui.Visible = val
-end)
-
-createToggle(AimbotScroll, "Prediction Enabled", "Turn off to use raw head", Aimbot_Prediction, function(val)
-	Aimbot_Prediction = val
-end)
-
-createToggle(AimbotScroll, "Wall Check", "Requires line of sight", Aimbot_WallCheck, function(val)
-	Aimbot_WallCheck = val
-end)
-
-createSlider(AimbotScroll, "FOV Radius", 100, 800, Aimbot_FOVRadius, function(val)
-	Aimbot_FOVRadius = val
-	FOVCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
-end, "Pixels")
-
-createSlider(AimbotScroll, "Sensitivity", 0, 1, Aimbot_Sensitivity, function(val)
-	Aimbot_Sensitivity = val
-end)
-
-createHeader(AimbotScroll, "RAGE MODE", "Strong, sticky targeting")
-
-createToggle(AimbotScroll, "Rage Mode", "", RageMode_Enabled, function(val)
-	RageMode_Enabled = val
-	RageCircleGui.Visible = val
-end)
-
-createSlider(AimbotScroll, "Rage FOV", 100, 1000, Rage_FOVRadius, function(val)
-	Rage_FOVRadius = val
-	RageCircleGui.Size = UDim2.new(0, val * 2, 0, val * 2)
-end)
-
-createSlider(AimbotScroll, "Rage Sensitivity", 0, 1, Rage_Sensitivity, function(val)
-	Rage_Sensitivity = val
-end)
-
-createSlider(AimbotScroll, "Stick Frames", 1, 30, Rage_StickFrames, function(val)
-	Rage_StickFrames = math.floor(val)
-end)
-
-createHeader(AimbotScroll, "AUDIO", "Sound notifications")
-
-createToggle(AimbotScroll, "Enemy Visible Sound", "Play when enemy is in view", Aimbot_EnemyVisibleSound, function(val)
-	Aimbot_EnemyVisibleSound = val
-end)
-
-createToggle(AimbotScroll, "Hit Sound", "Play when aimed target takes dmg", Aimbot_HitSound, function(val)
-	Aimbot_HitSound = val
-end)
-
-createHeader(ESPScroll, "ESP", "Wallhacks and player highlights")
-
-createToggle(ESPScroll, "ESP Enabled", "Highlights players in range", ESP_Enabled, function(val)
-	ESP_Enabled = val
-	if not val then
-		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
-			h.Enabled = false
-		end
-	end
-end)
-
-createSlider(ESPScroll, "Max Distance", 500, 5000, ESP_MaxDistance, function(val)
-	ESP_MaxDistance = val
-end, "Studs")
-
-createSlider(ESPScroll, "Fill Opacity", 0, 1, 1 - ESP_FillTransparency, function(val)
-	ESP_FillTransparency = 1 - val
-	for _, child in ipairs(ESP_HighlightsFolder:GetChildren()) do
-		if child:IsA("Highlight") then
-			child.FillTransparency = ESP_FillTransparency
-		end
-	end
-end)
-
-createHeader(SettingsScroll, "SETTINGS", "Behavior and visuals")
-
-createToggle(SettingsScroll, "Animations", "Smooth UI transitions", animationsEnabled, function(val)
-	animationsEnabled = val
-end)
-
--- FOV circle update loop + enemy detection
+--=========================================================
+-- MAIN LOOP + INPUT HANDLING
+--=========================================================
 RunService.RenderStepped:Connect(function()
-	local scale = uiScale.Scale
+	if not player or not camera then return end
+	
 	local myChar = player.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
 
-	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-		-- Mobile: keep FOV in the center
-		local center = camera.ViewportSize / 2
+	local scale = uiScale.Scale
+
+	-- Handle mobile aim
+	if mobileAimActive and Aimbot_Enabled then
+		local bestPos = select(1, getBestTargetPos(nil, Aimbot_WallCheck))
+		if bestPos then
+			local newCF = CFrame.new(myRoot.Position, bestPos)
+			myRoot.CFrame = newCF
+		end
+	end
+
+	-- Position FOV circles (follow touch or mouse)
+	if UserInputService:GetTouchSize() > 0 then
+		-- Mobile: center FOV on touch location
+		local touchPos = UserInputService:GetTouchPosition(0)
+		local center = touchPos
 
 		FOVCircleGui.Position = UDim2.fromOffset(
 			center.X / scale,
@@ -1222,11 +1099,11 @@ if Aimbot_HitSound then
 	end)
 end
 
--- Input: Aimbot toggle + Silent Aim 360
+-- Input: Aimbot toggle + Silent Aim 360 + Mobile Aim Key
 UserInputService.InputBegan:Connect(function(input, gp)
 	if gp then return end
 
-	-- toggle aimbot
+	-- toggle aimbot (keyboard)
 	if input.UserInputType == Enum.UserInputType.Keyboard
 		and input.KeyCode == Settings.AimbotKey then
 		if not Aimbot_Enabled then return end
@@ -1234,6 +1111,16 @@ UserInputService.InputBegan:Connect(function(input, gp)
 		notify("Aimbot: " .. (Aimbot_On and "ON" or "OFF"), ACCENT_RED)
 		if MobileAimButton then
 			MobileAimButton.BackgroundColor3 = Aimbot_On and ACCENT_RED or BUTTON_BG_STRONG
+		end
+	end
+
+	-- Mobile aim key (gamepad/mobile button)
+	if input.UserInputType == Enum.UserInputType.Gamepad1
+		and input.KeyCode == Settings.MobileAimKey then
+		if not Aimbot_Enabled then return end
+		mobileAimActive = true
+		if MobileAimButton then
+			MobileAimButton.BackgroundColor3 = ACCENT_RED
 		end
 	end
 
@@ -1252,6 +1139,19 @@ UserInputService.InputBegan:Connect(function(input, gp)
 
 		-- normal fire
 		fireWeapon()
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+	if gp then return end
+
+	-- Mobile aim key release
+	if input.UserInputType == Enum.UserInputType.Gamepad1
+		and input.KeyCode == Settings.MobileAimKey then
+		mobileAimActive = false
+		if MobileAimButton then
+			MobileAimButton.BackgroundColor3 = BUTTON_BG_STRONG
+		end
 	end
 end)
 
