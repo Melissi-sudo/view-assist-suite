@@ -1279,4 +1279,28 @@ UserInputService.InputBegan:Connect(function(input, gp)
 	end
 end)
 
+RunService.RenderStepped:Connect(function()
+	if not Aimbot_On or not Aimbot_Enabled then
+		return
+	end
+
+	local targetPos
+
+	if Aimbot_360Mode then
+		targetPos = select(1, getBestTargetPos360(Aimbot_WallCheck))
+	else
+		targetPos = select(1, getBestTargetPos(nil, Aimbot_WallCheck))
+	end
+
+	if targetPos then
+		local camCF = camera.CFrame
+		local desired = CFrame.new(camCF.Position, targetPos)
+
+		camera.CFrame = camCF:Lerp(
+			desired,
+			RageMode_Enabled and Rage_Sensitivity or Aimbot_Sensitivity
+		)
+	end
+end)
+
 notify("VRO Aim Suite loaded", ACCENT_RED_SOFT)
