@@ -830,6 +830,31 @@ end
 local lastRageTarget
 local rageStickCounter = 0
 
+-------------------
+local function isTargetValid(plr)
+	if not plr or plr == player then
+		return false
+	end
+
+	if Aimbot_TeamCheck and sameTeam(player, plr) then
+		return false
+	end
+
+	local char = plr.Character
+	if not char then
+		return false
+	end
+
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then
+		return false
+	end
+
+	return char:FindFirstChild("Head") ~= nil
+		and char:FindFirstChild("HumanoidRootPart") ~= nil
+end 
+------------------------------
+
 local function getBestTargetPos(customFOV, doWallCheck)
 	local myChar = player.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -853,6 +878,12 @@ local function getBestTargetPos(customFOV, doWallCheck)
 	local smallest = baseFOV
 
 	local function consider(plr)
+		    local char = plr.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then
+        return
+		end
+		
 		if plr == player then
 			return
 		end
@@ -925,7 +956,6 @@ local function getBestTargetPos(customFOV, doWallCheck)
 	CurrentTarget = nil
 	return nil, nil
 end
-end
 
 -- 360° target picker: ignores FOV and on-screen checks
 local function getBestTargetPos360(doWallCheck)
@@ -981,7 +1011,7 @@ end
 	end
 
 	return bestPos, bestPlayer
-end
+    end
 
 --=========================================================
 -- TARGETING UI
