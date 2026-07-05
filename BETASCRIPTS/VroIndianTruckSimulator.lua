@@ -15,7 +15,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- CONFIG
 --====================================================
 local config = {
-	TargetPartName = "TeleportPart", -- your assigned custom part name
+	TargetPartName = "Win Part", -- peos
 	AutoReturnDistance = 100,        -- studs
 	TeleportHeightOffset = 4,        -- studs above the target part
 	TeleportTweenTime = 1.15,        -- seconds
