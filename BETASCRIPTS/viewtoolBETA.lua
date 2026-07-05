@@ -784,7 +784,7 @@ local function visible(fromPos, toPos, ignore)
 	local dir = toPos - fromPos
 	local result = Workspace:Raycast(fromPos, dir, params)
 	if not result then return true end
-return (result.Position - toPos).Magnitude <= 1
+return (result.Position - toPos).Magnitude <= 2
 end
 
 local function getHead(char)
