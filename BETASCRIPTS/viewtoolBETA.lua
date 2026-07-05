@@ -784,7 +784,7 @@ local function visible(fromPos, toPos, ignore)
 	local dir = toPos - fromPos
 	local result = Workspace:Raycast(fromPos, dir, params)
 	if not result then return true end
-	return (result.Position - toPos).Magnitude <= 2
+	return result.Instance and result.Instance:IsDescendantOf(targetCharacter)
 end
 
 local function getHead(char)
@@ -818,7 +818,7 @@ local function predictedPosition(targetHead, targetRoot)
 	local camPos = camera.CFrame.Position
 	local distance = (targetHead.Position - camPos).Magnitude
 
-	local bulletSpeed = 350
+	local bulletSpeed = 275
 	local t = distance / bulletSpeed
 
 	local scale = Settings.BasePredictionStrength + distance * Settings.DistanceScaleFactor
