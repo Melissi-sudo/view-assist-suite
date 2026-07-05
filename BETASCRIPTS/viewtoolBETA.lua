@@ -659,6 +659,10 @@ local ESP_FillTransparency  = 0.6
 local ESP_MaxDistance       = 2000
 local lastESPRefresh        = 0
 
+local CurrentTarget = nil
+local LostTargetTime = 0
+local TargetStickTime = 0.2 -- seconds
+
 local ESP_HighlightsFolder = Instance.new("Folder")
 ESP_HighlightsFolder.Name  = "VRO_ESP_Highlights"
 ESP_HighlightsFolder.Parent = ScreenGui
@@ -697,7 +701,7 @@ local lastPlayedSounds = {}
 -- FIRE HANDLER (NO AUTO)
 --=========================================================
 local function fireWeapon()
-	-- call your tool firing logic here
+	-- impossible to autofire on mobile
 end
 
 --=========================================================
@@ -912,6 +916,10 @@ local function getBestTargetPos360(doWallCheck)
 	local camPos = camera.CFrame.Position
 
 	local function consider(plr)
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+if not hum or hum.Health <= 0 then
+	return
+end
 		if plr == player then return end
 		if Aimbot_TeamCheck and sameTeam(player, plr) then return end
 		local char = plr.Character
