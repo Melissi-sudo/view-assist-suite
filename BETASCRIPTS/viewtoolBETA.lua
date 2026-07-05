@@ -833,35 +833,60 @@ local rageStickCounter = 0
 local function getBestTargetPos(customFOV, doWallCheck)
 	local myChar = player.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot or not camera then return nil end
+	if not myRoot or not camera then
+		return nil
+	end
 
-	local mousePos = Vector2.new(mouse.X, mouse.Y)
-	local bestPos, bestPlayer
+	local mousePos
+
+	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+		local vp = camera.ViewportSize
+		mousePos = Vector2.new(vp.X / 2, vp.Y / 2)
+	else
+		mousePos = Vector2.new(mouse.X, mouse.Y)
+	end
+
+	local bestPos
+	local bestPlayer
+
 	local baseFOV = customFOV or (RageMode_Enabled and Rage_FOVRadius or Aimbot_FOVRadius)
-	local stickFrames = RageMode_Enabled and Rage_StickFrames or 4
 	local smallest = baseFOV
 
 	local function consider(plr)
-		if plr == player then return end
-		if Aimbot_TeamCheck and sameTeam(player, plr) then return end
+		if plr == player then
+			return
+		end
+
+		if Aimbot_TeamCheck and sameTeam(player, plr) then
+			return
+		end
+
+		if not isTargetValid(plr) then
+			return
+		end
+
 		local char = plr.Character
-		local head = char and getHead(char)
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not head or not root then return end
+		local head = char.Head
+		local root = char.HumanoidRootPart
 
 		local aimPos = predictedPosition(head, root)
-		if not aimPos then return end
+		if not aimPos then
+			return
+		end
 
 		if doWallCheck and not visible(myRoot.Position, aimPos, {myChar, char}) then
 			return
 		end
 
 		local screenPos, onScreen = camera:WorldToViewportPoint(aimPos)
-		if not onScreen or screenPos.Z <= 0 then return end
+		if not onScreen or screenPos.Z <= 0 then
+			return
+		end
 
-		local dist2D = (mousePos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
-		if dist2D <= smallest then
-			smallest = dist2D
+		local dist = (mousePos - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+
+		if dist < smallest then
+			smallest = dist
 			bestPos = aimPos
 			bestPlayer = plr
 		end
@@ -877,32 +902,29 @@ local function getBestTargetPos(customFOV, doWallCheck)
 				consider(plr)
 			end
 		end
-	else -- All
+	else
 		for _, plr in ipairs(Players:GetPlayers()) do
 			consider(plr)
 		end
 	end
 
-	if RageMode_Enabled and not customFOV then
-		if bestPos and bestPlayer then
-			lastRageTarget = bestPlayer
-			rageStickCounter = stickFrames
-			return bestPos, bestPlayer
-		end
-		if lastRageTarget and rageStickCounter > 0 then
-			rageStickCounter -= 1
-			local char = lastRageTarget.Character
-			local head = char and getHead(char)
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			if head and root then
-				return predictedPosition(head, root), lastRageTarget
-			end
-		else
-			lastRageTarget = nil
+	-- Keep current target briefly for smoother aiming
+	if bestPlayer then
+		CurrentTarget = bestPlayer
+		LostTargetTime = tick()
+		return bestPos, bestPlayer
+	end
+
+	if CurrentTarget then
+		if tick() - LostTargetTime < TargetStickTime and isTargetValid(CurrentTarget) then
+			local char = CurrentTarget.Character
+			return predictedPosition(char.Head, char.HumanoidRootPart), CurrentTarget
 		end
 	end
 
-	return bestPos, bestPlayer
+	CurrentTarget = nil
+	return nil, nil
+end
 end
 
 -- 360° target picker: ignores FOV and on-screen checks
