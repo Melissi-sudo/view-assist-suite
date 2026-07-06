@@ -1041,8 +1041,12 @@ local function getBestTargetPos(customFOV, doWallCheck)
 
 	-- Keep current target briefly for smoother aiming
 	if bestPlayer then
-		CurrentTarget = bestPlayer
-		LostTargetTime = tick()
+CurrentTarget = bestPlayer
+LostTargetTime = tick()
+
+if Aimbot_HitSound and LastHitTarget ~= bestPlayer then
+	onPlayerHit(bestPlayer)
+end
 		return bestPos, bestPlayer
 	end
 
@@ -1362,22 +1366,35 @@ end)
 
 -- Monitor hit sounds
 if Aimbot_HitSound then
-	local function onPlayerHit()
-	local char = player.Character
-	if not char then return end
+	local HitConnection = nil
+	local LastHitTarget = nil
 
-	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local function onPlayerHit(plr)
+		if HitConnection then
+			HitConnection:Disconnect()
+			HitConnection = nil
+		end
+
+		LastHitTarget = plr
+
+		if not plr then return end
+
+		local char = plr.Character
+		if not char then return end
+
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
 		if not humanoid then return end
-		
+
 		local lastHealth = humanoid.Health
-		
-		humanoid.HealthChanged:Connect(function(newHealth)
+
+		HitConnection = humanoid.HealthChanged:Connect(function(newHealth)
 			if newHealth < lastHealth and newHealth > 0 then
 				playSound(SOUND_HIT, 0.5)
 			end
 			lastHealth = newHealth
 		end)
 	end
+end
 	
 if player.Character then
 	onPlayerHit()
