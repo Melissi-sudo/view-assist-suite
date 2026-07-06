@@ -689,6 +689,9 @@ local SilentAim_Enabled         = false
 local SavedAimPos               = nil
 local MobileAimButton           = nil
 
+local HitConnection = nil
+Local LastHitTarget = nil
+
 -- Sound IDs
 local SOUND_ENEMY_VISIBLE = "rbxassetid://150975887"
 local SOUND_HIT = "rbxassetid://134763632925481"
@@ -748,6 +751,12 @@ rageCircle.ScaleType = Enum.ScaleType.Fit
 --=========================================================
 -- HELPERS
 --=========================================================
+local function onPlayerHit(plr)
+			if HitConnection then
+			HitConnection:Disconnect()
+			HitConnection = nil
+	end
+
 local function sameTeam(a, b)
 	if not a or not b then return false end
 	if a.Team and b.Team then
@@ -1366,15 +1375,6 @@ end)
 
 -- Monitor hit sounds
 if Aimbot_HitSound then
-	local HitConnection = nil
-	local LastHitTarget = nil
-
-	local function onPlayerHit(plr)
-		if HitConnection then
-			HitConnection:Disconnect()
-			HitConnection = nil
-		end
-
 		LastHitTarget = plr
 
 		if not plr then return end
@@ -1394,11 +1394,7 @@ if Aimbot_HitSound then
 			lastHealth = newHealth
 		end)
 	end
-end
-	
-if player.Character then
-	onPlayerHit()
-end
+end	
 
 player.CharacterAdded:Connect(function()
 	task.wait(0.1)
