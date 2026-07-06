@@ -1284,22 +1284,40 @@ createHeader(ESPScroll, "ESP", "Wallhacks and player highlights")
 
 createToggle(ESPScroll, "ESP Enabled", "Highlights players in range", ESP_Enabled, function(val)
 	ESP_Enabled = val
+	
 	if not val then
+		-- 1. Turn off all existing highlights
 		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
-			h.Enabled = false
+			if h:IsA("Highlight") then
+				h.Enabled = false
+			end
 		end
-	end
-end)
-
-createSlider(ESPScroll, "Max Distance", 500, 5000, ESP_MaxDistance, function(val)
-	ESP_MaxDistance = val
-end, "Studs")
-
-createSlider(ESPScroll, "Fill Opacity", 0, 1, 1 - ESP_FillTransparency, function(val)
-	ESP_FillTransparency = 1 - val
-	for _, child in ipairs(ESP_HighlightsFolder:GetChildren()) do
-		if child:IsA("Highlight") then
-			child.FillTransparency = ESP_FillTransparency
+		
+		-- 2. Turn off all floating text instantly
+		for _, plr in ipairs(game:GetService("Players"):GetPlayers()) do
+			local char = plr.Character
+			local head = char and char:FindFirstChild("Head")
+			local bbg = head and head:FindFirstChild("ESP_Billboard")
+			if bbg then
+				bbg.Enabled = false
+			end
+		end
+	else
+		-- 1. Turn all existing highlights back on
+		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
+			if h:IsA("Highlight") then
+				h.Enabled = true
+			end
+		end
+		
+		-- 2. Turn all floating text back on
+		for _, plr in ipairs(game:GetService("Players"):GetPlayers()) do
+			local char = plr.Character
+			local head = char and char:FindFirstChild("Head")
+			local bbg = head and head:FindFirstChild("ESP_Billboard")
+			if bbg then
+				bbg.Enabled = true
+			end
 		end
 	end
 end)
