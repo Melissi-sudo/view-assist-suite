@@ -760,17 +760,33 @@ local function getDistance(p1, p2)
 	return (p1 - p2).Magnitude
 end
 
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+-- --- AUTOMATIC FOLDER INITIALIZATION ---
+-- This ensures the script never breaks due to a missing folder
+local ESP_HighlightsFolder = workspace:FindFirstChild("ESP_Storage")
+if not ESP_HighlightsFolder then
+	ESP_HighlightsFolder = Instance.new("Folder")
+	ESP_HighlightsFolder.Name = "ESP_Storage"
+	ESP_HighlightsFolder.Parent = workspace
+end
+
+-- --- THE ESP CORE ENGINE ---
 local function getOrCreateESP(plr)
+	-- Skip yourself so you don't get blinded by your own ESP
+	if plr == localPlayer then return end 
+	
 	local char = plr.Character
 	if not char then return end
 
-	-- 1. Fix Team Color Dynamically
+	-- 1. Dynamic Team Color Resolution
 	local targetColor = ACCENT_RED
 	if useTeamColor and plr.Team then
 		targetColor = plr.TeamColor.Color
 	end
 
-	-- 2. Manage Highlight
+	-- 2. Highlight Rendering
 	local tag = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
 	if not tag then
 		tag = Instance.new("Highlight")
@@ -781,20 +797,19 @@ local function getOrCreateESP(plr)
 		tag.Parent = ESP_HighlightsFolder
 	end
 	
-	-- CRITICAL FIX: Explicitly bind the highlight strictly to the character model
 	tag.Adornee = char
 	tag.FillTransparency = ESP_FillTransparency
 	tag.FillColor = targetColor
 
-	-- 3. Manage Floating Text (BillboardGui Setup)
-	local head = char:WaitForChild("Head", 3)
+	-- 3. Floating Text Billboards
+	local head = char:FindFirstChild("Head") or char:WaitForChild("Head", 2)
 	if head then
 		local bbg = head:FindFirstChild("ESP_Billboard")
 		if not bbg then
 			bbg = Instance.new("BillboardGui")
 			bbg.Name = "ESP_Billboard"
 			bbg.Size = UDim2.new(0, 200, 0, 50)
-			bbg.StudsOffset = Vector3.new(0, 3, 0) -- Adjusts how high it floats above the head
+			bbg.StudsOffset = Vector3.new(0, 3, 0) -- Floats exactly 3 studs over head
 			bbg.AlwaysOnTop = true
 			bbg.ResetOnSpawn = false
 			
@@ -804,26 +819,59 @@ local function getOrCreateESP(plr)
 			textLabel.BackgroundTransparency = 1
 			textLabel.Font = Enum.Font.GothamBold
 			textLabel.TextSize = 12
-			textLabel.TextStrokeTransparency = 0 -- Sharp text outline for readability
+			textLabel.TextStrokeTransparency = 0 -- Gives a clean outline
 			textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 			textLabel.Parent = bbg
 			
 			bbg.Parent = head
 		end
 		
-		-- Track live health details safely
+		-- Live Health Calculation Safely
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		local health = hum and math.floor(hum.Health) or 0
 		local maxHealth = hum and math.floor(hum.MaxHealth) or 100
 		
 		local label = bbg:FindFirstChild("InfoLabel")
 		if label then
-			label.Text = string.format("%s\n[HP: %d/%d]", plr.Name, health, maxHealth)
-			label.TextColor3 = targetColor
+			if hum and hum.Health > 0 then
+				label.Visible = true
+				label.Text = string.format("%s\n[HP: %d/%d]", plr.Name, health, maxHealth)
+				label.TextColor3 = targetColor
+			else
+				-- Hide the text completely if they are dead
+				label.Visible = false 
+			end
 		end
 	end
 end
 
+-- --- CLEANUP ENGINE ---
+local function clearESP(plr)
+	local oldHighlight = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
+	if oldHighlight then oldHighlight:Destroy() end
+end
+
+-- --- AUTOMATIC EVENT LISTENERS ---
+-- Handles cleanup when someone ragequits or leaves the lobby
+Players.PlayerRemoving:Connect(clearESP)
+
+-- --- THE LIVE REFRESH LOOP ---
+-- Automatically tracks respawns and updates health text changes every half-second
+task.spawn(function()
+	while true do
+		for _, plr in ipairs(Players:GetPlayers()) do
+			pcall(function()
+				if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+					getOrCreateESP(plr)
+				else
+					-- Clean up leftover tracking assets if they are spawning/dead
+					clearESP(plr)
+				end
+			end)
+		end
+		task.wait(0.5) -- Refresh frequency (Keep it light on performance)
+	end
+end)
 -- CRITICAL PERFORMANCE FIX: Create the params container ONCE outside the function.
 -- This stops the script from destroying your frame rate during heavy combat loops.
 local wallCheckParams = RaycastParams.new()
