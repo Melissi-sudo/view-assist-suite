@@ -760,11 +760,7 @@ local function getDistance(p1, p2)
 	return (p1 - p2).Magnitude
 end
 
-local Players = game:GetService("Players")
-local localPlayer = Players.LocalPlayer
-
 -- --- AUTOMATIC FOLDER INITIALIZATION ---
--- This ensures the script never breaks due to a missing folder
 local ESP_HighlightsFolder = workspace:FindFirstChild("ESP_Storage")
 if not ESP_HighlightsFolder then
 	ESP_HighlightsFolder = Instance.new("Folder")
@@ -772,21 +768,20 @@ if not ESP_HighlightsFolder then
 	ESP_HighlightsFolder.Parent = workspace
 end
 
--- --- THE ESP CORE ENGINE ---
+-- --- THE REFRESHED ESP CORE ENGINE ---
 local function getOrCreateESP(plr)
-	-- Skip yourself so you don't get blinded by your own ESP
 	if plr == localPlayer then return end 
 	
 	local char = plr.Character
 	if not char then return end
 
-	-- 1. Dynamic Team Color Resolution
+	-- 1. DYNAMIC TEAM COLOR RESOLUTION (Updates live every single loop cycle)
 	local targetColor = ACCENT_RED
-	if useTeamColor and plr.Team then
+	if plr.Team then
 		targetColor = plr.TeamColor.Color
 	end
 
-	-- 2. Highlight Rendering
+	-- 2. Highlight Rendering & Color Refresh
 	local tag = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
 	if not tag then
 		tag = Instance.new("Highlight")
@@ -797,19 +792,21 @@ local function getOrCreateESP(plr)
 		tag.Parent = ESP_HighlightsFolder
 	end
 	
+	-- Force properties to update dynamically in real-time
 	tag.Adornee = char
-	tag.FillTransparency = ESP_FillTransparency
+	tag.Enabled = ESP_Enabled 
 	tag.FillColor = targetColor
+	tag.FillTransparency = ESP_FillTransparency
 
-	-- 3. Floating Text Billboards
+	-- 3. Floating Name Text Billboards (Health tracking removed)
 	local head = char:FindFirstChild("Head") or char:WaitForChild("Head", 2)
 	if head then
 		local bbg = head:FindFirstChild("ESP_Billboard")
 		if not bbg then
 			bbg = Instance.new("BillboardGui")
 			bbg.Name = "ESP_Billboard"
-			bbg.Size = UDim2.new(0, 200, 0, 50)
-			bbg.StudsOffset = Vector3.new(0, 3, 0) -- Floats exactly 3 studs over head
+			bbg.Size = UDim2.new(0, 200, 0, 30) -- Smaller vertical size since health is gone
+			bbg.StudsOffset = Vector3.new(0, 2.5, 0)
 			bbg.AlwaysOnTop = true
 			bbg.ResetOnSpawn = false
 			
@@ -819,28 +816,19 @@ local function getOrCreateESP(plr)
 			textLabel.BackgroundTransparency = 1
 			textLabel.Font = Enum.Font.GothamBold
 			textLabel.TextSize = 12
-			textLabel.TextStrokeTransparency = 0 -- Gives a clean outline
+			textLabel.TextStrokeTransparency = 0 
 			textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 			textLabel.Parent = bbg
 			
 			bbg.Parent = head
 		end
 		
-		-- Live Health Calculation Safely
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local health = hum and math.floor(hum.Health) or 0
-		local maxHealth = hum and math.floor(hum.MaxHealth) or 100
-		
+		bbg.Enabled = ESP_Enabled
 		local label = bbg:FindFirstChild("InfoLabel")
 		if label then
-			if hum and hum.Health > 0 then
-				label.Visible = true
-				label.Text = string.format("%s\n[HP: %d/%d]", plr.Name, health, maxHealth)
-				label.TextColor3 = targetColor
-			else
-				-- Hide the text completely if they are dead
-				label.Visible = false 
-			end
+			-- Clean up: Set only the Name text and force team color updates live
+			label.Text = plr.Name
+			label.TextColor3 = targetColor
 		end
 	end
 end
@@ -849,14 +837,18 @@ end
 local function clearESP(plr)
 	local oldHighlight = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
 	if oldHighlight then oldHighlight:Destroy() end
+	
+	local char = plr.Character
+	if char then
+		local head = char:FindFirstChild("Head")
+		local oldBillboard = head and head:FindFirstChild("ESP_Billboard")
+		if oldBillboard then oldBillboard:Destroy() end
+	end
 end
 
--- --- AUTOMATIC EVENT LISTENERS ---
--- Handles cleanup when someone ragequits or leaves the lobby
 Players.PlayerRemoving:Connect(clearESP)
 
 -- --- THE LIVE REFRESH LOOP ---
--- Automatically tracks respawns and updates health text changes every half-second
 task.spawn(function()
 	while true do
 		for _, plr in ipairs(Players:GetPlayers()) do
@@ -864,12 +856,11 @@ task.spawn(function()
 				if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
 					getOrCreateESP(plr)
 				else
-					-- Clean up leftover tracking assets if they are spawning/dead
 					clearESP(plr)
 				end
 			end)
 		end
-		task.wait(0.5) -- Refresh frequency (Keep it light on performance)
+		task.wait(0.4) 
 	end
 end)
 -- CRITICAL PERFORMANCE FIX: Create the params container ONCE outside the function.
@@ -1286,37 +1277,20 @@ createToggle(ESPScroll, "ESP Enabled", "Highlights players in range", ESP_Enable
 	ESP_Enabled = val
 	
 	if not val then
-		-- 1. Turn off all existing highlights
+		-- Instantly disable highlights
 		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
 			if h:IsA("Highlight") then
 				h.Enabled = false
 			end
 		end
 		
-		-- 2. Turn off all floating text instantly
-		for _, plr in ipairs(game:GetService("Players"):GetPlayers()) do
+		-- Instantly disable name text labels
+		for _, plr in ipairs(Players:GetPlayers()) do
 			local char = plr.Character
 			local head = char and char:FindFirstChild("Head")
 			local bbg = head and head:FindFirstChild("ESP_Billboard")
 			if bbg then
 				bbg.Enabled = false
-			end
-		end
-	else
-		-- 1. Turn all existing highlights back on
-		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
-			if h:IsA("Highlight") then
-				h.Enabled = true
-			end
-		end
-		
-		-- 2. Turn all floating text back on
-		for _, plr in ipairs(game:GetService("Players"):GetPlayers()) do
-			local char = plr.Character
-			local head = char and char:FindFirstChild("Head")
-			local bbg = head and head:FindFirstChild("ESP_Billboard")
-			if bbg then
-				bbg.Enabled = true
 			end
 		end
 	end
