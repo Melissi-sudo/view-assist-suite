@@ -676,7 +676,7 @@ local Aimbot_FOVRadius          = 250
 local Aimbot_ShowFOV            = true
 local Aimbot_On                 = false
 local Aimbot_360Mode            = false
-local Aimbot_EnemyVisibleSound  = true
+local Aimbot_EnemyVisibleSound  = false
 local Aimbot_HitSound           = true
 
 local RageMode_Enabled          = false
@@ -760,31 +760,92 @@ local function getDistance(p1, p2)
 	return (p1 - p2).Magnitude
 end
 
-local function getOrCreateHighlight(plr)
-	local tag = ESP_HighlightsFolder:FindFirstChild(plr.Name)
+local function getOrCreateESP(plr)
+	local char = plr.Character
+	if not char then return end
+
+	-- 1. Fix Team Color Dynamically
+	local targetColor = ACCENT_RED
+	if useTeamColor and plr.Team then
+		targetColor = plr.TeamColor.Color
+	end
+
+	-- 2. Manage Highlight
+	local tag = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
 	if not tag then
 		tag = Instance.new("Highlight")
-		tag.Name = plr.Name
+		tag.Name = plr.Name .. "_Highlight"
 		tag.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-		tag.FillTransparency = ESP_FillTransparency
-		tag.FillColor = ACCENT_RED
 		tag.OutlineColor = Color3.new(1, 1, 1)
 		tag.OutlineTransparency = 0
 		tag.Parent = ESP_HighlightsFolder
 	end
-	return tag
+	
+	-- CRITICAL FIX: Explicitly bind the highlight strictly to the character model
+	tag.Adornee = char
+	tag.FillTransparency = ESP_FillTransparency
+	tag.FillColor = targetColor
+
+	-- 3. Manage Floating Text (BillboardGui Setup)
+	local head = char:WaitForChild("Head", 3)
+	if head then
+		local bbg = head:FindFirstChild("ESP_Billboard")
+		if not bbg then
+			bbg = Instance.new("BillboardGui")
+			bbg.Name = "ESP_Billboard"
+			bbg.Size = UDim2.new(0, 200, 0, 50)
+			bbg.StudsOffset = Vector3.new(0, 3, 0) -- Adjusts how high it floats above the head
+			bbg.AlwaysOnTop = true
+			bbg.ResetOnSpawn = false
+			
+			local textLabel = Instance.new("TextLabel")
+			textLabel.Name = "InfoLabel"
+			textLabel.Size = UDim2.new(1, 0, 1, 0)
+			textLabel.BackgroundTransparency = 1
+			textLabel.Font = Enum.Font.GothamBold
+			textLabel.TextSize = 12
+			textLabel.TextStrokeTransparency = 0 -- Sharp text outline for readability
+			textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+			textLabel.Parent = bbg
+			
+			bbg.Parent = head
+		end
+		
+		-- Track live health details safely
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local health = hum and math.floor(hum.Health) or 0
+		local maxHealth = hum and math.floor(hum.MaxHealth) or 100
+		
+		local label = bbg:FindFirstChild("InfoLabel")
+		if label then
+			label.Text = string.format("%s\n[HP: %d/%d]", plr.Name, health, maxHealth)
+			label.TextColor3 = targetColor
+		end
+	end
 end
+
+-- CRITICAL PERFORMANCE FIX: Create the params container ONCE outside the function.
+-- This stops the script from destroying your frame rate during heavy combat loops.
+local wallCheckParams = RaycastParams.new()
+wallCheckParams.FilterType = Enum.RaycastFilterType.Exclude
+wallCheckParams.IgnoreWater = true
 
 local function visible(fromPos, toPos, ignore)
 	if not fromPos or not toPos then return false end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = ignore
-	params.IgnoreWater = true
+
+	-- Refresh only the ignore list instead of rebuilding the entire object
+	wallCheckParams.FilterDescendantsInstances = ignore or {}
+
 	local dir = toPos - fromPos
-	local result = Workspace:Raycast(fromPos, dir, params)
+	local result = workspace:Raycast(fromPos, dir, wallCheckParams)
+
+	-- If the ray hit absolutely nothing, the line of sight is 100% clear
 	if not result then return true end
-return (result.Position - toPos).Magnitude <= 2
+
+	-- TUNING FIX: Reduced leniency from 2 studs to 0.5 studs.
+	-- At 2 studs, the script would mistakenly think targets behind thin walls or 
+	-- tight corners were "visible". 0.5 is the sweet spot for math rounding errors.
+	return (result.Position - toPos).Magnitude <= 0.5
 end
 
 local function getHead(char)
