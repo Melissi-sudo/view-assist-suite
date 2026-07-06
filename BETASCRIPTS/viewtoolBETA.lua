@@ -959,60 +959,66 @@ end
 
 -- 360° target picker: ignores FOV and on-screen checks
 local function getBestTargetPos360(doWallCheck)
-	local myChar = player.Character
-	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot or not camera then return nil end
+    local myChar = player.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not camera then return nil end
 
-	local bestPos, bestPlayer
-	local bestDist = math.huge
-	local camPos = camera.CFrame.Position
+    local bestPos, bestPlayer
+    local bestDist = math.huge
+    local camPos = camera.CFrame.Position
 
-	local function consider(plr)
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-if not hum or hum.Health <= 0 then
-	return
-end
-		if plr == player then return end
-		if Aimbot_TeamCheck and sameTeam(player, plr) then return end
-		local char = plr.Character
-		local head = char and getHead(char)
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not head or not root then return end
+    local function consider(plr)
+        if plr == player then return end
+        
+        -- FIX: Define the character at the very start of the check
+        local char = plr.Character
+        if not char then return end
 
-		local aimPos = predictedPosition(head, root)
-		if not aimPos then return end
+        -- Now this check will work perfectly
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then
+            return
+        end
 
-		if doWallCheck and not visible(myRoot.Position, aimPos, {myChar, char}) then
-			return
-		end
+        if Aimbot_TeamCheck and sameTeam(player, plr) then return end
+        
+        local head = getHead(char)
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not head or not root then return end
 
-		local dist = (aimPos - camPos).Magnitude
-		if dist < bestDist then
-			bestDist = dist
-			bestPos = aimPos
-			bestPlayer = plr
-		end
-	end
+        local aimPos = predictedPosition(head, root)
+        if not aimPos then return end
 
-	if targetMode == "PerPlayer" then
-		if selectedPlayer then
-			consider(selectedPlayer)
-		end
-	elseif targetMode == "Enemies" then
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if not sameTeam(player, plr) then
-				consider(plr)
-			end
-		end
-	else
-		for _, plr in ipairs(Players:GetPlayers()) do
-			consider(plr)
-		end
-	end
+        if doWallCheck and not visible(myRoot.Position, aimPos, {myChar, char}) then
+            return
+        end
 
-	return bestPos, bestPlayer
+        local dist = (aimPos - camPos).Magnitude
+        if dist < bestDist then
+            bestDist = dist
+            bestPos = aimPos
+            bestPlayer = plr
+        end
     end
 
+    if targetMode == "PerPlayer" then
+        if selectedPlayer then
+            consider(selectedPlayer)
+        end
+    elseif targetMode == "Enemies" then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if not sameTeam(player, plr) then
+                consider(plr)
+            end
+        end
+    else
+        for _, plr in ipairs(Players:GetPlayers()) do
+            consider(plr)
+        end
+    end
+
+    return bestPos, bestPlayer
+end
 --=========================================================
 -- TARGETING UI
 --=========================================================
