@@ -10,7 +10,7 @@ local TweenService      = game:GetService("TweenService")
 local Workspace         = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-local camera = Workspace.CurrentCamera
+local camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera")
 local mouse  = player:GetMouse()
 
 --=========================================================
@@ -208,7 +208,7 @@ local MinimizeBtn = Instance.new("TextButton")
 MinimizeBtn.Size = UDim2.new(0, 34, 0, 34)
 MinimizeBtn.Position = UDim2.new(1, -84, 0.5, -17)
 MinimizeBtn.BackgroundColor3 = BUTTON_BG
-MinimizeBtn.Text = "-"
+MinimizeBtn.Text = "▾"
 MinimizeBtn.TextColor3 = TEXT_SUB
 MinimizeBtn.Font = Enum.Font.GothamBold
 MinimizeBtn.TextScaled = true
@@ -229,10 +229,10 @@ MinimizeBtn.MouseButton1Click:Connect(function()
 	if minimized then
 		storedSize = MainFrame.Size
 		TweenService:Create(MainFrame, TweenInfo.new(0.2), {Size = UDim2.new(storedSize.X.Scale, storedSize.X.Offset, 0, 46)}):Play()
-		MinimizeBtn.Text = "+"
+		MinimizeBtn.Text = "▴"
 	else
 		TweenService:Create(MainFrame, TweenInfo.new(0.2), {Size = storedSize}):Play()
-		MinimizeBtn.Text = "-"
+		MinimizeBtn.Text = "▾"
 	end
 end)
 
@@ -663,16 +663,13 @@ local CurrentTarget = nil
 local LostTargetTime = 0
 local TargetStickTime = 0.2 -- seconds
 
-local ESP_HighlightsFolder = workspace:FindFirstChild("ESP_Storage")
-if not ESP_HighlightsFolder then
-	ESP_HighlightsFolder = Instance.new("Folder")
-	ESP_HighlightsFolder.Name = "ESP_Storage"
-	ESP_HighlightsFolder.Parent = workspace
-end
+local ESP_HighlightsFolder = Instance.new("Folder")
+ESP_HighlightsFolder.Name  = "VRO_ESP_Highlights"
+ESP_HighlightsFolder.Parent = ScreenGui
 
 local Aimbot_Enabled            = true
-local Aimbot_MaxDistance        = 2000
 local Aimbot_WallCheck          = true
+local Aimbot_ThinWallCheck      = false -- FIXED: Added variable for Thin Walls
 local Aimbot_TeamCheck          = true
 local Aimbot_Prediction         = true
 local Aimbot_Sensitivity        = 0.18
@@ -705,13 +702,73 @@ local visibleEnemies = {}
 local lastPlayedSounds = {}
 
 --=========================================================
+-- FIRE HANDLER (NO AUTO)
+--=========================================================
+local function fireWeapon()
+	-- impossible to autofire on mobile
+end
+
+--=========================================================
+-- FOV CIRCLES (centered on mouse)
+--=========================================================
+local FOVCircleGui = Instance.new("Frame")
+FOVCircleGui.Size = UDim2.new(0, Aimbot_FOVRadius * 2, 0, Aimbot_FOVRadius * 2)
+FOVCircleGui.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircleGui.BackgroundTransparency = 1
+FOVCircleGui.BorderSizePixel = 0
+FOVCircleGui.Visible = Aimbot_ShowFOV
+FOVCircleGui.ZIndex = 20
+FOVCircleGui.Parent = ScreenGui
+
+local fovCircle = Instance.new("ImageLabel")
+fovCircle.Size = UDim2.new(1, 0, 1, 0)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Image = "rbxassetid://12201347372"
+fovCircle.ImageColor3 = Color3.fromRGB(255, 255, 255)
+fovCircle.ImageTransparency = 0.3
+fovCircle.ZIndex = 20
+fovCircle.Parent = FOVCircleGui
+fovCircle.ScaleType = Enum.ScaleType.Fit
+
+local RageCircleGui = Instance.new("Frame")
+RageCircleGui.Size = UDim2.new(0, Rage_FOVRadius * 2, 0, Rage_FOVRadius * 2)
+RageCircleGui.AnchorPoint = Vector2.new(0.5, 0.5)
+RageCircleGui.BackgroundTransparency = 1
+RageCircleGui.BorderSizePixel = 0
+RageCircleGui.Visible = false
+RageCircleGui.ZIndex = 19
+RageCircleGui.Parent = ScreenGui
+
+local rageCircle = Instance.new("ImageLabel")
+rageCircle.Size = UDim2.new(1, 0, 1, 0)
+rageCircle.BackgroundTransparency = 1
+rageCircle.Image = "rbxassetid://12201347372"
+rageCircle.ImageColor3 = ACCENT_RED_SOFT
+rageCircle.ImageTransparency = 0.6
+rageCircle.ZIndex = 19
+rageCircle.Parent = RageCircleGui
+rageCircle.ScaleType = Enum.ScaleType.Fit
+
+--=========================================================
 -- HELPERS
 --=========================================================
+local function playSound(soundId, volume)
+	local sound = Instance.new("Sound")
+	sound.SoundId = soundId
+	sound.Volume = volume or 0.5
+	sound.Parent = workspace
+	game:GetService("Debris"):AddItem(sound, 2)
+	sound:Play()
+end
+
+-- FIXED: The Broken Audio Engine Hook
 local function onPlayerHit(plr)
 	if HitConnection then
 		HitConnection:Disconnect()
 		HitConnection = nil
 	end
+
+	LastHitTarget = plr
 	if not plr then return end
 
 	local char = plr.Character
@@ -723,12 +780,17 @@ local function onPlayerHit(plr)
 	local lastHealth = humanoid.Health
 
 	HitConnection = humanoid.HealthChanged:Connect(function(newHealth)
-		if newHealth < lastHealth and newHealth > 0 then
+		if Aimbot_HitSound and newHealth < lastHealth and newHealth > 0 then
 			playSound(SOUND_HIT, 0.5)
 		end
 		lastHealth = newHealth
 	end)
 end
+
+player.CharacterAdded:Connect(function()
+	task.wait(0.1)
+	onPlayerHit(nil)
+end)
 
 local function sameTeam(a, b)
 	if not a or not b then return false end
@@ -742,24 +804,13 @@ local function getDistance(p1, p2)
 	return (p1 - p2).Magnitude
 end
 
-local function getEquippedTool()
-	local char = player.Character
-	if char then
-		return char:FindFirstChildOfClass("Tool")
-	end
-	return nil
+-- --- AUTOMATIC FOLDER INITIALIZATION ---
+if not workspace:FindFirstChild("ESP_Storage") then
+	local f = Instance.new("Folder")
+	f.Name = "ESP_Storage"
+	f.Parent = workspace
 end
-
-local function isHoldingSniper()
-	local tool = getEquippedTool()
-	if tool then
-		local name = tool.Name:lower()
-		if name:find("sniper") or name:find("awp") or name:find("scout") or name:find("railgun") or name:find("rifle") then
-			return true
-		end
-	end
-	return false
-end
+local ESP_Storage = workspace:FindFirstChild("ESP_Storage")
 
 -- --- THE REFRESHED ESP CORE ENGINE ---
 local function getOrCreateESP(plr)
@@ -768,21 +819,22 @@ local function getOrCreateESP(plr)
 	local char = plr.Character
 	if not char then return end
 
-	-- 1. DYNAMIC TEAM COLOR RESOLUTION
+	-- FIXED: Dynamic Team Color Updating correctly
 	local targetColor = ACCENT_RED
-	if plr.Team then
+	if ESP_TeamColor and plr.Team then
 		targetColor = plr.TeamColor.Color
+	elseif ESP_TeamColor and sameTeam(player, plr) then
+		targetColor = Color3.fromRGB(0, 170, 255)
 	end
 
-	-- 2. Highlight Rendering & Color Refresh
-	local tag = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
+	local tag = ESP_Storage:FindFirstChild(plr.Name .. "_Highlight")
 	if not tag then
 		tag = Instance.new("Highlight")
 		tag.Name = plr.Name .. "_Highlight"
 		tag.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 		tag.OutlineColor = Color3.new(1, 1, 1)
 		tag.OutlineTransparency = 0
-		tag.Parent = ESP_HighlightsFolder
+		tag.Parent = ESP_Storage
 	end
 	
 	tag.Adornee = char
@@ -790,14 +842,13 @@ local function getOrCreateESP(plr)
 	tag.FillColor = targetColor
 	tag.FillTransparency = ESP_FillTransparency
 
-	-- 3. Floating Name Text Billboards
 	local head = char:FindFirstChild("Head") or char:WaitForChild("Head", 2)
 	if head then
 		local bbg = head:FindFirstChild("ESP_Billboard")
 		if not bbg then
 			bbg = Instance.new("BillboardGui")
 			bbg.Name = "ESP_Billboard"
-			bbg.Size = UDim2.new(0, 200, 0, 30)
+			bbg.Size = UDim2.new(0, 200, 0, 30) 
 			bbg.StudsOffset = Vector3.new(0, 2.5, 0)
 			bbg.AlwaysOnTop = true
 			bbg.ResetOnSpawn = false
@@ -824,9 +875,8 @@ local function getOrCreateESP(plr)
 	end
 end
 
--- --- CLEANUP ENGINE ---
 local function clearESP(plr)
-	local oldHighlight = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
+	local oldHighlight = ESP_Storage:FindFirstChild(plr.Name .. "_Highlight")
 	if oldHighlight then oldHighlight:Destroy() end
 	
 	local char = plr.Character
@@ -838,20 +888,22 @@ local function clearESP(plr)
 end
 
 Players.PlayerRemoving:Connect(clearESP)
-Players.PlayerAdded:Connect(function(plr)
-	plr.CharacterAdded:Connect(function()
-		task.wait(0.2)
-		if ESP_Enabled then getOrCreateESP(plr) end
-	end)
-end)
 
--- --- THE LIVE REFRESH LOOP ---
+-- FIXED: Clean Single Unified ESP Loop
 task.spawn(function()
 	while true do
 		for _, plr in ipairs(Players:GetPlayers()) do
 			pcall(function()
-				if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-					getOrCreateESP(plr)
+				if ESP_Enabled and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+					local myChar = player.Character
+					local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+					local root = plr.Character:FindFirstChild("HumanoidRootPart")
+					
+					if myRoot and root and (root.Position - myRoot.Position).Magnitude <= ESP_MaxDistance then
+						getOrCreateESP(plr)
+					else
+						clearESP(plr)
+					end
 				else
 					clearESP(plr)
 				end
@@ -861,27 +913,34 @@ task.spawn(function()
 	end
 end)
 
+-- FIXED: Wall Check + Thin Wall Engine
 local wallCheckParams = RaycastParams.new()
 wallCheckParams.FilterType = Enum.RaycastFilterType.Exclude
 wallCheckParams.IgnoreWater = true
 
 local function visible(fromPos, toPos, ignore)
 	if not fromPos or not toPos then return false end
-
 	wallCheckParams.FilterDescendantsInstances = ignore or {}
 
 	local dir = toPos - fromPos
 	local result = workspace:Raycast(fromPos, dir, wallCheckParams)
 
 	if not result then return true end
+	if (result.Position - toPos).Magnitude <= 0.5 then return true end
 
-	-- Dynamic precision threshold depending on weapon held
-	local leniency = 0.5
-	if not isHoldingSniper() then
-		leniency = 0.1
+	-- Thin Wall Override Hook
+	if Aimbot_ThinWallCheck then
+		local revDir = result.Position - toPos
+		local revResult = workspace:Raycast(toPos, revDir, wallCheckParams)
+		if revResult then
+			local thickness = (result.Position - revResult.Position).Magnitude
+			if thickness <= 3.0 then 
+				return true
+			end
+		end
 	end
 
-	return (result.Position - toPos).Magnitude <= leniency
+	return false
 end
 
 local function getHead(char)
@@ -892,15 +951,6 @@ local function getHead(char)
 		return head
 	end
 	return nil
-end
-
-local function playSound(soundId, volume)
-	local sound = Instance.new("Sound")
-	sound.SoundId = soundId
-	sound.Volume = volume or 0.5
-	sound.Parent = workspace
-	game:GetService("Debris"):AddItem(sound, 2)
-	sound:Play()
 end
 
 local function predictedPosition(targetHead, targetRoot)
@@ -931,16 +981,13 @@ local function isTargetValid(plr)
 	if not plr or plr == player then
 		return false
 	end
-
 	if Aimbot_TeamCheck and sameTeam(player, plr) then
 		return false
 	end
-
 	local char = plr.Character
 	if not char then
 		return false
 	end
-
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then
 		return false
@@ -958,7 +1005,6 @@ local function getBestTargetPos(customFOV, doWallCheck)
 	end
 
 	local mousePos
-
 	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
 		local vp = camera.ViewportSize
 		mousePos = Vector2.new(vp.X / 2, vp.Y / 2)
@@ -979,29 +1025,15 @@ local function getBestTargetPos(customFOV, doWallCheck)
 			return
 		end
 		
-		if plr == player then
-			return
-		end
-
-		if Aimbot_TeamCheck and sameTeam(player, plr) then
-			return
-		end
-
-		if not isTargetValid(plr) then
-			return
-		end
-
-		local root = char.HumanoidRootPart
-		local distFromMe = (root.Position - myRoot.Position).Magnitude
-		if distFromMe > Aimbot_MaxDistance then
-			return
-		end
+		if plr == player then return end
+		if Aimbot_TeamCheck and sameTeam(player, plr) then return end
+		if not isTargetValid(plr) then return end
 
 		local head = char.Head
+		local root = char.HumanoidRootPart
+
 		local aimPos = predictedPosition(head, root)
-		if not aimPos then
-			return
-		end
+		if not aimPos then return end
 
 		if doWallCheck and not visible(myRoot.Position, aimPos, {myChar, char}) then
 			return
@@ -1042,7 +1074,6 @@ local function getBestTargetPos(customFOV, doWallCheck)
 		LostTargetTime = tick()
 
 		if Aimbot_HitSound and LastHitTarget ~= bestPlayer then
-			LastHitTarget = bestPlayer
 			onPlayerHit(bestPlayer)
 		end
 		return bestPos, bestPlayer
@@ -1060,68 +1091,64 @@ local function getBestTargetPos(customFOV, doWallCheck)
 end
 
 local function getBestTargetPos360(doWallCheck)
-	local myChar = player.Character
-	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot or not camera then return nil end
+    local myChar = player.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not camera then return nil end
 
-	local bestPos, bestPlayer
-	local bestDist = math.huge
-	local camPos = camera.CFrame.Position
+    local bestPos, bestPlayer
+    local bestDist = math.huge
+    local camPos = camera.CFrame.Position
 
-	local function consider(plr)
-		if plr == player then return end
-		
-		local char = plr.Character
-		if not char then return end
+    local function consider(plr)
+        if plr == player then return end
+        
+        local char = plr.Character
+        if not char then return end
 
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 then
-			return
-		end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then
+            return
+        end
 
-		if Aimbot_TeamCheck and sameTeam(player, plr) then return end
-		
-		local head = getHead(char)
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if not head or not root then return end
+        if Aimbot_TeamCheck and sameTeam(player, plr) then return end
+        if not isTargetValid(plr) then return end
+        
+        local head = getHead(char)
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not head or not root then return end
 
-		local distFromMe = (root.Position - myRoot.Position).Magnitude
-		if distFromMe > Aimbot_MaxDistance then
-			return
-		end
+        local aimPos = predictedPosition(head, root)
+        if not aimPos then return end
 
-		local aimPos = predictedPosition(head, root)
-		if not aimPos then return end
+        if doWallCheck and not visible(myRoot.Position, aimPos, {myChar, char}) then
+            return
+        end
 
-		if doWallCheck and not visible(myRoot.Position, aimPos, {myChar, char}) then
-			return
-		end
+        local dist = (aimPos - camPos).Magnitude
+        if dist < bestDist then
+            bestDist = dist
+            bestPos = aimPos
+            bestPlayer = plr
+        end
+    end
 
-		local dist = (aimPos - camPos).Magnitude
-		if dist < bestDist then
-			bestDist = dist
-			bestPos = aimPos
-			bestPlayer = plr
-		end
-	end
+    if targetMode == "PerPlayer" then
+        if selectedPlayer then
+            consider(selectedPlayer)
+        end
+    elseif targetMode == "Enemies" then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if not sameTeam(player, plr) then
+                consider(plr)
+            end
+        end
+    else
+        for _, plr in ipairs(Players:GetPlayers()) do
+            consider(plr)
+        end
+    end
 
-	if targetMode == "PerPlayer" then
-		if selectedPlayer then
-			consider(selectedPlayer)
-		end
-	elseif targetMode == "Enemies" then
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if not sameTeam(player, plr) then
-				consider(plr)
-			end
-		end
-	else
-		for _, plr in ipairs(Players:GetPlayers()) do
-			consider(plr)
-		end
-	end
-
-	return bestPos, bestPlayer
+    return bestPos, bestPlayer
 end
 
 --=========================================================
@@ -1220,13 +1247,21 @@ createToggle(AimbotScroll, "Aimbot Enabled", "Global aim assist", Aimbot_Enabled
 	if not val then Aimbot_On = false end
 end)
 
+-- FIXED: 360 Mode FOV Toggle integration
 createToggle(AimbotScroll, "360 Mode", "Detect all enemies in 360°", Aimbot_360Mode, function(val)
 	Aimbot_360Mode = val
+	if val then
+		FOVCircleGui.Visible = false
+		RageCircleGui.Visible = false
+	else
+		FOVCircleGui.Visible = Aimbot_ShowFOV
+		RageCircleGui.Visible = RageMode_Enabled
+	end
 end)
 
 createToggle(AimbotScroll, "Show FOV", "", Aimbot_ShowFOV, function(val)
 	Aimbot_ShowFOV = val
-	FOVCircleGui.Visible = val
+	FOVCircleGui.Visible = (not Aimbot_360Mode) and val
 end)
 
 createToggle(AimbotScroll, "Prediction Enabled", "Turn off to use raw head", Aimbot_Prediction, function(val)
@@ -1237,9 +1272,10 @@ createToggle(AimbotScroll, "Wall Check", "Requires line of sight", Aimbot_WallCh
 	Aimbot_WallCheck = val
 end)
 
-createSlider(AimbotScroll, "Aimbot Max Distance", 100, 5000, Aimbot_MaxDistance, function(val)
-	Aimbot_MaxDistance = val
-end, "Studs")
+-- FIXED: Added Thin Wall Toggle
+createToggle(AimbotScroll, "Thin Wall Check", "Target through thin walls", Aimbot_ThinWallCheck, function(val)
+	Aimbot_ThinWallCheck = val
+end)
 
 createSlider(AimbotScroll, "FOV Radius", 100, 800, Aimbot_FOVRadius, function(val)
 	Aimbot_FOVRadius = val
@@ -1254,7 +1290,7 @@ createHeader(AimbotScroll, "RAGE MODE", "Strong, sticky targeting")
 
 createToggle(AimbotScroll, "Rage Mode", "", RageMode_Enabled, function(val)
 	RageMode_Enabled = val
-	RageCircleGui.Visible = val
+	RageCircleGui.Visible = (not Aimbot_360Mode) and val
 end)
 
 createSlider(AimbotScroll, "Rage FOV", 100, 1000, Rage_FOVRadius, function(val)
@@ -1285,20 +1321,20 @@ createHeader(ESPScroll, "ESP", "Wallhacks and player highlights")
 createToggle(ESPScroll, "ESP Enabled", "Highlights players in range", ESP_Enabled, function(val)
 	ESP_Enabled = val
 	if not val then
-		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
-			if h:IsA("Highlight") then
-				h.Enabled = false
-			end
+		for _, h in ipairs(ESP_Storage:GetChildren()) do
+			if h:IsA("Highlight") then h.Enabled = false end
 		end
 		for _, plr in ipairs(Players:GetPlayers()) do
 			local char = plr.Character
 			local head = char and char:FindFirstChild("Head")
 			local bbg = head and head:FindFirstChild("ESP_Billboard")
-			if bbg then
-				bbg.Enabled = false
-			end
+			if bbg then bbg.Enabled = false end
 		end
 	end
+end)
+
+createToggle(ESPScroll, "Team Colors", "Use actual team colors for ESP rendering", ESP_TeamColor, function(val)
+	ESP_TeamColor = val
 end)
 
 createHeader(SettingsScroll, "SETTINGS", "Behavior and visuals")
@@ -1307,28 +1343,24 @@ createToggle(SettingsScroll, "Animations", "Smooth UI transitions", animationsEn
 	animationsEnabled = val
 end)
 
+--=========================================================
+-- ENGINE LOOPS
+--=========================================================
 RunService.RenderStepped:Connect(function()
 	local scale = uiScale.Scale
 	local myChar = player.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-		local center = camera.ViewportSize / 2
-		FOVCircleGui.Position = UDim2.fromOffset(center.X / scale, center.Y / scale)
-		RageCircleGui.Position = UDim2.fromOffset(center.X / scale, center.Y / scale)
-	else
-		local mouseLocation = UserInputService:GetMouseLocation()
-		FOVCircleGui.Position = UDim2.fromOffset(mouseLocation.X / scale, mouseLocation.Y / scale)
-		RageCircleGui.Position = UDim2.fromOffset(mouseLocation.X / scale, mouseLocation.Y / scale)
-	end
+	local currentMouseLoc = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled and (camera.ViewportSize / 2) or UserInputService:GetMouseLocation()
+	FOVCircleGui.Position = UDim2.fromOffset(currentMouseLoc.X / scale, currentMouseLoc.Y / scale)
+	RageCircleGui.Position = UDim2.fromOffset(currentMouseLoc.X / scale, currentMouseLoc.Y / scale)
 
 	if Aimbot_EnemyVisibleSound and myRoot then
 		local newVisibleEnemies = {}
 		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr ~= player then
-				local char = plr.Character
-				local head = char and getHead(char)
-				if head and (not Aimbot_TeamCheck or not sameTeam(player, plr)) then
+			if plr ~= player and isTargetValid(plr) then
+				local head = getHead(plr.Character)
+				if head and visible(myRoot.Position, head.Position, {myChar, plr.Character}) then
 					newVisibleEnemies[plr.UserId] = true
 					if not visibleEnemies[plr.UserId] then
 						playSound(SOUND_ENEMY_VISIBLE, 1.2)
@@ -1338,11 +1370,6 @@ RunService.RenderStepped:Connect(function()
 		end
 		visibleEnemies = newVisibleEnemies
 	end
-end)
-
-player.CharacterAdded:Connect(function()
-	task.wait(0.1)
-	onPlayerHit()
 end)
 
 if UserInputService.TouchEnabled then
@@ -1356,7 +1383,6 @@ if UserInputService.TouchEnabled then
     MobileAimButton.Font = Enum.Font.GothamBold
     MobileAimButton.TextColor3 = TEXT_MAIN
     MobileAimButton.Parent = ScreenGui
-
     Instance.new("UICorner", MobileAimButton).CornerRadius = UDim.new(1, 0)
 
     MobileAimButton.MouseButton1Click:Connect(function()
@@ -1370,8 +1396,7 @@ end
 UserInputService.InputBegan:Connect(function(input, gp)
 	if gp then return end
 
-	if input.UserInputType == Enum.UserInputType.Keyboard
-		and input.KeyCode == Settings.AimbotKey then
+	if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Settings.AimbotKey then
 		if not Aimbot_Enabled then return end
 		Aimbot_On = not Aimbot_On
 		notify("Aimbot: " .. (Aimbot_On and "ON" or "OFF"), ACCENT_RED)
@@ -1391,85 +1416,19 @@ UserInputService.InputBegan:Connect(function(input, gp)
 				camera.CFrame = originalCF
 			end
 		end
+		fireWeapon()
 	end
 end)
 
 RunService.RenderStepped:Connect(function()
-	if not Aimbot_On or not Aimbot_Enabled then
-		return
-	end
+	if not Aimbot_On or not Aimbot_Enabled then return end
 
-	local targetPos
-	if Aimbot_360Mode then
-		targetPos = select(1, getBestTargetPos360(Aimbot_WallCheck))
-	else
-		targetPos = select(1, getBestTargetPos(nil, Aimbot_WallCheck))
-	end
+	local targetPos = Aimbot_360Mode and select(1, getBestTargetPos360(Aimbot_WallCheck)) or select(1, getBestTargetPos(nil, Aimbot_WallCheck))
 
 	if targetPos then
 		local camCF = camera.CFrame
 		local desired = CFrame.new(camCF.Position, targetPos)
-		camera.CFrame = camCF:Lerp(
-			desired,
-			RageMode_Enabled and Rage_Sensitivity or Aimbot_Sensitivity
-		)
-	end
-end)
-
-RunService.RenderStepped:Connect(function()
-	if not ESP_Enabled then
-		for _, h in ipairs(ESP_HighlightsFolder:GetChildren()) do
-			if h:IsA("Highlight") then
-				h.Enabled = false
-				h.Adornee = nil
-			end
-		end
-		return
-	end
-
-	local myChar = player.Character
-	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not myRoot then return end
-
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= player then
-			local char = plr.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-
-			local highlight = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
-			if not highlight and char then
-				getOrCreateESP(plr)
-				highlight = ESP_HighlightsFolder:FindFirstChild(plr.Name .. "_Highlight")
-			end
-
-			if highlight and root and hum and hum.Health > 0 then
-				local dist = (root.Position - myRoot.Position).Magnitude
-				if dist <= ESP_MaxDistance then
-					highlight.Adornee = char
-					highlight.Enabled = true
-					highlight.FillTransparency = ESP_FillTransparency
-
-					if ESP_TeamColor and sameTeam(player, plr) then
-						highlight.FillColor = Color3.fromRGB(0, 170, 255)
-						highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-					else
-						local targetColor = ACCENT_RED
-						if plr.Team then
-							targetColor = plr.TeamColor.Color
-						end
-						highlight.FillColor = targetColor
-						highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-					end
-				else
-					highlight.Enabled = false
-					highlight.Adornee = nil
-				end
-			elseif highlight then
-				highlight.Enabled = false
-				highlight.Adornee = nil
-			end
-		end
+		camera.CFrame = camCF:Lerp(desired, RageMode_Enabled and Rage_Sensitivity or Aimbot_Sensitivity)
 	end
 end)
 
