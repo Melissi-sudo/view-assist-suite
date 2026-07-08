@@ -761,6 +761,16 @@ local function playSound(soundId, volume)
 	sound:Play()
 end
 
+local function isHoldingSniper()
+	local char = player.Character
+	local tool = char and char:FindFirstChildOfClass("Tool")
+	if tool then
+		local name = tool.Name:lower()
+		return name:find("sniper") or name:find("awp") or name:find("scout") or name:find("rifle") or name:find("rail")
+	end
+	return false
+end
+
 -- FIXED: The Broken Audio Engine Hook
 local function onPlayerHit(plr)
 	if HitConnection then
@@ -889,6 +899,16 @@ end
 
 Players.PlayerRemoving:Connect(clearESP)
 
+-- Force background connection listener for late-joining players
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function()
+		task.wait(0.3) -- Small frame delay to let character components build safely
+		if ESP_Enabled then 
+			pcall(function() getOrCreateESP(plr) end) 
+		end
+	end)
+end)
+
 -- FIXED: Clean Single Unified ESP Loop
 task.spawn(function()
 	while true do
@@ -926,8 +946,8 @@ local function visible(fromPos, toPos, ignore)
 	local result = workspace:Raycast(fromPos, dir, wallCheckParams)
 
 	if not result then return true end
-	if (result.Position - toPos).Magnitude <= 0.5 then return true end
-
+local leniency = isHoldingSniper() and 0.5 or 0.1
+	if (result.Position - toPos).Magnitude <= leniency then return true end
 	-- Thin Wall Override Hook
 	if Aimbot_ThinWallCheck then
 		local revDir = result.Position - toPos
