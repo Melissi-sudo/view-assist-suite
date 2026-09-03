@@ -13,6 +13,16 @@ local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera")
 local mouse  = player:GetMouse()
 
+-- Refresh camera and mouse reference if re-initialized after place teleport
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera")
+end)
+
+player.CharacterAdded:Connect(function()
+	camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera")
+	mouse = player:GetMouse()
+end)
+
 --=========================================================
 -- THEME
 --=========================================================
@@ -45,12 +55,20 @@ local Settings = {
 --=========================================================
 -- ROOT GUI + SCALE
 --=========================================================
+local TeleportService   = game:GetService("TeleportService")
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "VroAimbot"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Ensures UI persists during place teleport loading screens
+pcall(function()
+	TeleportService:SetTeleportGui(ScreenGui)
+end)
 
 local uiScale = Instance.new("UIScale")
 uiScale.Parent = ScreenGui
